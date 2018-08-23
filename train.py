@@ -6,9 +6,25 @@ from tensorpack import *
 from config import finalize_configs, config as cfg
 
 class DetectionModel(ModelDesc):
-    pass
+    def get_inference_tensor_names(self):
+    """
+    Returns two lists of tensor names to be used to create an inference callable.
+
+    Returns:
+        [str]: input names
+        [str]: output names
+    """
+    out = ['final_boxes', 'final_probs', 'final_labels']
+    return ['image'], out
 
 class ResNetC4Model(DetectionModel):
+    pass
+
+class EvalCallback(Callback):
+    """
+    A callback that runs COCO evaluation once a while.
+    It supports multi-GPU evaluation if TRAINER=='replicated' and single-GPU evaluation if TRAINER=='horovod'
+    """
     pass
 
 if __name__ == '__main__':
@@ -56,9 +72,26 @@ if __name__ == '__main__':
             ScheduledHyperParamSetter(
                 'learning_rate', warmup_schedule, interp='linear', step_based=True),
             ScheduledHyperParamSetter('learning_rate', lr_schedule),
-            EvalCallback(*MODEL.get_inference_tensor_names()),
+            # EvalCallback(*MODEL.get_inference_tensor_names()),
             PeakMemoryTracker(),
             EstimatedTimeLeft(median=True),
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
             GPUUtilizationTracker(),
         ]
+
+        if args.load:
+            session_init = get_model_loader(args.load)
+        else:
+            session_init = get_model_loader(cfg.BACKBONE.WEIGHTS) if cfg.BACKBONE.WEIGHTS else None
+
+        traincfg = TrainConfig(
+            model=MODEL,
+            data=QueueInput(get_train_dataflow()),
+            callbacks=callbacks,
+            steps_per_epoch=stepnum,
+            max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
+            session_init=session_init,
+        )
+        # # nccl mode has better speed than cpu mode
+        # trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
+        # launch_train_with_config(traincfg, trainer)
