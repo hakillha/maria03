@@ -11,6 +11,18 @@ from data import get_train_dataflow
 
 class DetectionModel(ModelDesc):
 
+    def optimizer(self):
+        # lr = tf.get_variable('learning_rate', initializer=0.003, trainable=False)
+        # tf.summary.scalar('learning_rate-summary', lr)
+
+        # # The learning rate is set for 8 GPUs, and we use trainers with average=False.
+        # lr = lr / 8.
+        # opt = tf.train.MomentumOptimizer(lr, 0.9)
+        # if cfg.TRAIN.NUM_GPUS < 8:
+        #     opt = optimizer.AccumGradOptimizer(opt, 8 // cfg.TRAIN.NUM_GPUS)
+        # return opt
+        return tf.train.GradientDescentOptimizer(0.1)
+
     def get_inference_tensor_names(self):
         """
         Returns two lists of tensor names to be used to create an inference callable.
@@ -24,7 +36,20 @@ class DetectionModel(ModelDesc):
 
 
 class ResNetC4Model(DetectionModel):
-    pass
+    
+    def inputs(self):
+        ret = [
+            tf.placeholder(tf.float32, (None, None, 3), 'image'),
+            tf.placeholder(tf.int32, (None, None, cfg.RPN.NUM_ANCHOR), 'anchor_labels'),
+            tf.placeholder(tf.float32, (None, None, cfg.RPN.NUM_ANCHOR, 4), 'anchor_boxes'),
+            tf.placeholder(tf.float32, (None, 4), 'gt_boxes'),
+            tf.placeholder(tf.int64, (None,), 'gt_labels')]  # all > 0
+        return ret
+
+    def build_graph(self, *inputs):
+        is_training = get_current_tower_context().is_training
+        
+        return inputs
 
 
 class EvalCallback(Callback):
@@ -93,14 +118,34 @@ if __name__ == '__main__':
             session_init = get_model_loader(cfg.BACKBONE.WEIGHTS) if cfg.BACKBONE.WEIGHTS else None
 
 
-        traincfg = TrainConfig(
-            model=MODEL,
-            data=QueueInput(get_train_dataflow()),
-            callbacks=callbacks,
-            steps_per_epoch=stepnum,
-            max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
-            session_init=session_init,
-        )
-        # nccl mode has better speed than cpu mode
-        trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
-        launch_train_with_config(traincfg, trainer)
+        # traincfg = TrainConfig(
+        #     model=MODEL,
+        #     data=QueueInput(get_train_dataflow()),
+        #     callbacks=callbacks,
+        #     steps_per_epoch=stepnum,
+        #     max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
+        #     session_init=session_init,
+        # )
+        # # nccl mode has better speed than cpu mode
+        # trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
+        # launch_train_with_config(traincfg, trainer)
+
+        dev_test = True
+        if dev_test:
+            df = get_train_dataflow()
+            df.reset_state()
+            df_gen = df.get_data()
+            with TowerContext('', is_training=True):
+                model = ResNetC4Model()
+                input_handle = model.inputs()
+                ret_handle = model.build_graph(input_handle)
+
+            with tf.Session() as sess:
+                for _ in range(10):
+                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
+                    input_dict = {input_handle[0]: image,
+                                    input_handle[1]: anchor_labels,
+                                    input_handle[2]: anchor_boxes,
+                                    input_handle[3]: gt_boxes,
+                                    input_handle[4]: gt_labels,}
+                    ret = sess.run(ret_handle, input_dict)
