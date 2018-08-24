@@ -130,12 +130,6 @@ _C.RPN.TRAIN_POST_NMS_TOPK = 2000
 _C.RPN.TEST_PRE_NMS_TOPK = 6000
 _C.RPN.TEST_POST_NMS_TOPK = 1000   # if you encounter OOM in inference, set this to a smaller number
 
-# fastrcnn training ---------------------
-_C.FRCNN.BATCH_PER_IM = 128
-_C.FRCNN.BBOX_REG_WEIGHTS = [10., 10., 5., 5.]  # Better but non-standard setting: [20, 20, 10, 10]
-_C.FRCNN.FG_THRESH = 0.5
-_C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
-
 def finalize_configs(is_training):
     """
     Run some sanity checks, and populate some configs from others
