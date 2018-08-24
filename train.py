@@ -4,6 +4,7 @@ import tensorflow as tf
 
 from tensorpack import *
 
+from basemodel import image_preprocess
 from config import finalize_configs, config as cfg
 # from data import PRWDataset
 from data import get_train_dataflow
@@ -11,17 +12,21 @@ from data import get_train_dataflow
 
 class DetectionModel(ModelDesc):
 
-    def optimizer(self):
-        # lr = tf.get_variable('learning_rate', initializer=0.003, trainable=False)
-        # tf.summary.scalar('learning_rate-summary', lr)
+    def preprocess(self, image):
+        image = tf.expand_dims(image, 0)
+        image = image_preprocess(image, bgr=True)
+        return tf.transpose(image, [0, 3, 1, 2])
 
-        # # The learning rate is set for 8 GPUs, and we use trainers with average=False.
-        # lr = lr / 8.
-        # opt = tf.train.MomentumOptimizer(lr, 0.9)
-        # if cfg.TRAIN.NUM_GPUS < 8:
-        #     opt = optimizer.AccumGradOptimizer(opt, 8 // cfg.TRAIN.NUM_GPUS)
-        # return opt
-        return tf.train.GradientDescentOptimizer(0.1)
+    def optimizer(self):
+        lr = tf.get_variable('learning_rate', initializer=0.003, trainable=False)
+        tf.summary.scalar('learning_rate-summary', lr)
+
+        # The learning rate is set for 8 GPUs, and we use trainers with average=False.
+        lr = lr / 8.
+        opt = tf.train.MomentumOptimizer(lr, 0.9)
+        if cfg.TRAIN.NUM_GPUS < 8:
+            opt = optimizer.AccumGradOptimizer(opt, 8 // cfg.TRAIN.NUM_GPUS)
+        return opt
 
     def get_inference_tensor_names(self):
         """
@@ -48,6 +53,8 @@ class ResNetC4Model(DetectionModel):
 
     def build_graph(self, *inputs):
         is_training = get_current_tower_context().is_training
+        image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = inputs
+        image = self.preprocess(image)     # 1CHW
         
         return inputs
 
@@ -57,7 +64,16 @@ class EvalCallback(Callback):
     A callback that runs COCO evaluation once a while.
     It supports multi-GPU evaluation if TRAINER=='replicated' and single-GPU evaluation if TRAINER=='horovod'
     """
-    pass
+
+    def __init__(self, in_names, out_names):
+        self._in_names, self._out_names = in_names, out_names
+
+    def _setup_graph(self):
+        num_gpu = cfg.TRAIN.NUM_GPUS
+        # Use two predictor threads per GPU to get better throughput
+        self.num_predictor = num_gpu * 2
+        self.dataflows = [get_eval_dataflow(shard=k, num_shards=self.num_predictor)
+                          for k in range(self.num_predictor)]
 
 
 if __name__ == '__main__':
@@ -105,7 +121,7 @@ if __name__ == '__main__':
             ScheduledHyperParamSetter(
                 'learning_rate', warmup_schedule, interp='linear', step_based=True),
             ScheduledHyperParamSetter('learning_rate', lr_schedule),
-            # EvalCallback(*MODEL.get_inference_tensor_names()),
+            EvalCallback(*MODEL.get_inference_tensor_names()),
             PeakMemoryTracker(),
             EstimatedTimeLeft(median=True),
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
@@ -141,7 +157,7 @@ if __name__ == '__main__':
                 ret_handle = model.build_graph(input_handle)
 
             with tf.Session() as sess:
-                for _ in range(10):
+                for _ in range(5):
                     image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
                     input_dict = {input_handle[0]: image,
                                     input_handle[1]: anchor_labels,

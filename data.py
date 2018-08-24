@@ -6,13 +6,15 @@ from os.path import join as pjoin
 import scipy.io
 import tqdm
 
-from tensorpack.dataflow import imgaug, MultiProcessMapDataZMQ, DataFromList
+from tensorpack.dataflow import (imgaug, MultiProcessMapDataZMQ,
+                                 DataFromList,)
 from tensorpack.utils.argtools import memoized
 from tensorpack.utils.rect import FloatBox
 from tensorpack.utils.timer import timed_operation
 
 from common import (CustomResize, filter_boxes_inside_shape,
-                    box_to_point8, point8_to_box)
+                    box_to_point8, point8_to_box,
+                    DataFromListOfDict)
 from config import config as cfg
 from utils.generate_anchors import generate_anchors
 from utils.np_box_ops import area as np_area
@@ -58,23 +60,24 @@ class PRWDataset(object):
                     img['height'] = 1080
                     img['width'] = 1920
 
-                anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
-                if 'box_new' in anno_data:
-                    gt_bb_array = anno_data['box_new']
-                elif 'anno_file' in anno_data:
-                    gt_bb_array = anno_data['anno_file']
+                if split_set=='train':
+                    anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
+                    if 'box_new' in anno_data:
+                        gt_bb_array = anno_data['box_new']
+                    elif 'anno_file' in anno_data:
+                        gt_bb_array = anno_data['anno_file']
 
-                img['boxes'] = []
-                for bb in gt_bb_array[:, 1:]:
-                    box = FloatBox(bb[0], bb[1], bb[2], bb[3])
-                    box.clip_by_shape([img['height'], img['width']])
-                    img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                    img['boxes'] = []
+                    for bb in gt_bb_array[:, 1:]:
+                        box = FloatBox(bb[0], bb[1], bb[2], bb[3])
+                        box.clip_by_shape([img['height'], img['width']])
+                        img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
-                img['class'] = np.asarray(gt_bb_array[:, 0], dtype='int32')
-                img['class'][img['class'] == -2] = 0
+                    img['class'] = np.asarray(gt_bb_array[:, 0], dtype='int32')
+                    img['class'][img['class'] == -2] = 0
 
-                img['is_crowd'] = np.zeros(len(img['class']), dtype='int8')
+                    img['is_crowd'] = np.zeros(len(img['class']), dtype='int8')
 
                 imgs.append(img)
 
@@ -312,4 +315,26 @@ def get_train_dataflow():
         return ret
 
     ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
+    return ds
+
+def get_eval_data_flow(shard=0, num_shards=1):
+    """
+    Args:
+        shard, num_shards: to get subset of evaluation data
+    """
+    prw = PRWDataset(cfg.DATA.BASEDIR)
+    imgs = prw.load('test')
+    num_imgs = len(imgs)
+    img_per_shard = num_imgs // num_shards
+    img_range = (shard * img_per_shard, (shard + 1) * img_per_shard if shard + 1 < num_shards else num_imgs)
+
+    # no filter for training
+    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], 'file_name')
+
+    def f(fname):
+        im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        assert im is not None, fname
+        return im
+    ds = MapDataComponent(ds, f, 0)
+    # Evaluation itself may be multi-threaded, therefore don't add prefetch here.
     return ds

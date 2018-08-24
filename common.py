@@ -1,7 +1,26 @@
 import numpy as np
 import cv2
 
+from tensorpack.dataflow import RNGDataFlow
 from tensorpack.dataflow.imgaug import transform
+
+
+class DataFromListOfDict(RNGDataFlow):
+    def __init__(self, lst, keys, shuffle=False):
+        self._lst = lst
+        self._keys = keys
+        self._shuffle = shuffle
+        self._size = len(lst)
+
+    def size(self):
+        return self._size
+
+    def get_data(self):
+        if self._shuffle:
+            self.rng.shuffle(self._lst)
+        for dic in self._lst:
+            dp = [dic[k] for k in self._keys]
+            yield dp
 
 
 class CustomResize(transform.TransformAugmentorBase):
