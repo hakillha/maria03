@@ -46,6 +46,7 @@ class PRWDataset(object):
             train_frame_list = train_frame_list_mat['img_index_' + split_set]
 
             imgs = []
+            imgs_without_fg = 0
 
             # each iteration only reads one file so it's faster
             for idx, frame in enumerate(train_frame_list):
@@ -67,20 +68,41 @@ class PRWDataset(object):
                     elif 'anno_file' in anno_data:
                         gt_bb_array = anno_data['anno_file']
 
-                    img['boxes'] = []
-                    for bb in gt_bb_array[:, 1:]:
-                        box = FloatBox(bb[0], bb[1], bb[2], bb[3])
-                        box.clip_by_shape([img['height'], img['width']])
-                        img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                    # if true, include gts that are bg as well
+                    include_all = False
+                    if include_all:
+                        img['boxes'] = []
+                        for bb in gt_bb_array[:, 1:]:
+                            box = FloatBox(bb[0], bb[1], bb[2], bb[3])
+                            box.clip_by_shape([img['height'], img['width']])
+                            img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
-                    img['class'] = np.asarray(gt_bb_array[:, 0], dtype='int32')
-                    img['class'][img['class'] == -2] = 0
+                        img['class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
+                        img['class'][img['class'] == -1] = 1
+                    else:
+                        img['boxes'] = []
+                        img['class'] = []
+                        for bb in gt_bb_array:
+                            if bb[0] != -2:
+                                box = FloatBox(bb[1], bb[2], bb[3], bb[4])
+                                box.clip_by_shape([img['height'], img['width']])
+                                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                                img['class'].append(bb[0])
+                            else:
+                                continue
+
+                        if len(img['boxes']) == 0:
+                            imgs_without_fg += 1
+                            continue
+                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                        img['class'] = np.asarray(img['class'], dtype='int32')
 
                     img['is_crowd'] = np.zeros(len(img['class']), dtype='int8')
 
                 imgs.append(img)
 
+            print('Number of images without foreground objects: {}.'.format(imgs_without_fg))
             return imgs
 
     def _use_absolute_file_name(self, img, file_name):
