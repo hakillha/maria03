@@ -53,22 +53,23 @@ class AttrDict():
     def __ne__(self, _):
         raise NotImplementedError()
 
+
 config = AttrDict()
 _C = config     # short alias to avoid coding
 
 # mode flags ---------------------
-_C.MODE_MASK = True        # FasterRCNN or MaskRCNN
+_C.MODE_MASK = False        # FasterRCNN or MaskRCNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/path/to/your/COCO/DIR'
+_C.DATA.BASEDIR = '/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/'
 _C.DATA.TRAIN = ['train2014', 'valminusminival2014']   # i.e., trainval35k
 _C.DATA.VAL = 'minival2014'   # For now, only support evaluation on single dataset
-_C.DATA.NUM_CATEGORY = 80    # 80 categories.
+_C.DATA.NUM_CATEGORY = 933    # 80 categories.
 _C.DATA.CLASS_NAMES = []  # NUM_CLASS (NUM_CATEGORY+1) strings, to be populated later by data loader. The first is BG.
 
 # basemodel ----------------------
-_C.BACKBONE.WEIGHTS = ''   # /path/to/weights.npz
+_C.BACKBONE.WEIGHTS = 'ckpt/ImageNet-R50-AlignPadding.npz'   # /path/to/weights.npz
 _C.BACKBONE.RESNET_NUM_BLOCK = [3, 4, 6, 3]     # for resnet50
 # RESNET_NUM_BLOCK = [3, 4, 23, 3]    # for resnet101
 _C.BACKBONE.FREEZE_AFFINE = False   # do not train affine parameters inside norm layers
@@ -97,8 +98,19 @@ _C.TRAIN.STEPS_PER_EPOCH = 500
 _C.TRAIN.LR_SCHEDULE = [240000, 320000, 360000]    # "2x" schedule in detectron
 _C.TRAIN.NUM_EVALS = 20  # number of evaluations to run during training
 
+# preprocessing --------------------
+# Alternative old (worse & faster) setting: 600, 1024
+# _C.PREPROC.SHORT_EDGE_SIZE = 800
+# _C.PREPROC.MAX_SIZE = 1333
+_C.PREPROC.SHORT_EDGE_SIZE = 600
+_C.PREPROC.MAX_SIZE = 1024
+# mean and std in RGB order.
+# Un-scaled version: [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+_C.PREPROC.PIXEL_MEAN = [123.675, 116.28, 103.53]
+_C.PREPROC.PIXEL_STD = [58.395, 57.12, 57.375]
+
 # anchors -------------------------
-_C.RPN.ANCHOR_STRIDE = 16
+_C.RPN.ANCHOR_STRIDE = 16 # as a relative base size?
 _C.RPN.ANCHOR_SIZES = (32, 64, 128, 256, 512)   # sqrtarea of the anchor box
 _C.RPN.ANCHOR_RATIOS = (0.5, 1., 2.)
 _C.RPN.POSITIVE_ANCHOR_THRESH = 0.7
@@ -107,7 +119,7 @@ _C.RPN.NEGATIVE_ANCHOR_THRESH = 0.3 # no hard negatives?
 # rpn training -------------------------
 _C.RPN.FG_RATIO = 0.5  # fg ratio among selected RPN anchors
 _C.RPN.BATCH_PER_IM = 256  # total (across FPN levels) number of anchors that are marked valid
-_C.RPN.MIN_SIZE = 0 # ???
+_C.RPN.MIN_SIZE = 0 # if either side of a proposal is smaller than this then it's ruled out
 _C.RPN.PROPOSAL_NMS_THRESH = 0.7
 _C.RPN.CROWD_OVERLAP_THRESH = 0.7  # boxes overlapping crowd will be ignored.
 _C.RPN.HEAD_DIM = 1024      # used in C4 only; look into faster rcnn paper
@@ -118,6 +130,12 @@ _C.RPN.TRAIN_PRE_NMS_TOPK = 12000
 _C.RPN.TRAIN_POST_NMS_TOPK = 2000
 _C.RPN.TEST_PRE_NMS_TOPK = 6000
 _C.RPN.TEST_POST_NMS_TOPK = 1000   # if you encounter OOM in inference, set this to a smaller number
+
+# fastrcnn training ---------------------
+_C.FRCNN.BATCH_PER_IM = 256
+_C.FRCNN.BBOX_REG_WEIGHTS = [10., 10., 5., 5.]  # Better but non-standard setting: [20, 20, 10, 10]
+_C.FRCNN.FG_THRESH = 0.5
+_C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 
 def finalize_configs(is_training):
     """
