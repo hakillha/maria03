@@ -1,0 +1,6 @@
+module add anaconda3/4.3.0
+module add cuda-toolkit/9.0.176
+module add cuDNN/9.0v7
+module add nccl/2.1.2-1
+
+source activate tensorpack02

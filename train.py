@@ -231,11 +231,11 @@ if __name__ == '__main__':
                 session_init=get_model_loader(args.load),
                 input_names=MODEL.get_inference_tensor_names()[0],
                 output_names=MODEL.get_inference_tensor_names()[1]))
-            if args.evaluate:
-                assert args.evaluate.endswith('.json'), args.evaluate
-                # offline_evaluate(pred, args.evaluate)
-            elif args.predict:
-                predict(pred, args.predict)
+        if args.evaluate:
+            assert args.evaluate.endswith('.json'), args.evaluate
+            # offline_evaluate(pred, args.evaluate)
+        elif args.predict:
+            predict(pred, args.predict)
     else:
         logger.set_logger_dir(args.logdir, 'd')
 
