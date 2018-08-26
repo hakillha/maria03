@@ -292,7 +292,7 @@ if __name__ == '__main__':
                 sess.run(tf.global_variables_initializer())
                 session_init._run_init(sess)
 
-                for _ in range(20):
+                for _ in range(1000):
                     image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
                     input_dict = {input_handle[0]: image,
                                     input_handle[1]: anchor_labels,

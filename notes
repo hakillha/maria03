@@ -4,3 +4,5 @@ module add cuDNN/9.0v7
 module add nccl/2.1.2-1
 
 source activate tensorpack02
+
+python3 train.py --config DATA.BASEDIR=/scratch3/yingges/data/PRW-v16.04.20/ BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz 
