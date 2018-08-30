@@ -9,3 +9,5 @@ python3 train.py --config \
 DATA.BASEDIR=/scratch3/yingges/data/PRW-v16.04.20/ \
 BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
 --logdir=train_log/01
+
+/home/yingges/software/bin/gdrive
