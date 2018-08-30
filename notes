@@ -11,3 +11,12 @@ BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
 --logdir=train_log/01
 
 /home/yingges/software/bin/gdrive
+
+python3 train.py \
+--predict=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20/c1s1_001351.jpg \
+--modeldir=ckpt/model-90000.data-00000-of-00001
+
+python3 train.py --config \
+DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 \
+BACKBONE.WEIGHTS=ckpt/COCO-R50C4-MaskRCNN-Standard.npz \
+--logdir=train_log/frcnn_08_30_03

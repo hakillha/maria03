@@ -69,6 +69,7 @@ class PRWDataset(object):
                         gt_bb_array = anno_data['anno_file']
 
                     # if true, include gts that are bg as well
+                    # todo: since this option will rarely be used, re-id class not added yet
                     include_all = False
                     if include_all:
                         img['boxes'] = []
@@ -78,17 +79,20 @@ class PRWDataset(object):
                             img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
                         img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
-                        img['class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
-                        img['class'][img['class'] == -1] = 1
+                        img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
+                        img['re_id_class'][img['re_id_class'] == -1] = 1
                     else:
                         img['boxes'] = []
+                        # the 2-class detection class, pedestrian/bg
                         img['class'] = []
+                        img['re_id_class'] = []
                         for bb in gt_bb_array:
                             if bb[0] != -2:
                                 box = FloatBox(bb[1], bb[2], bb[3], bb[4])
                                 box.clip_by_shape([img['height'], img['width']])
                                 img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                                img['class'].append(bb[0])
+                                img['class'].append(1)
+                                img['re_id_class'].append(bb[0])
                             else:
                                 continue
 
@@ -97,8 +101,9 @@ class PRWDataset(object):
                             continue
                         img['boxes'] = np.asarray(img['boxes'], dtype='float32')
                         img['class'] = np.asarray(img['class'], dtype='int32')
+                        img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
 
-                    img['is_crowd'] = np.zeros(len(img['class']), dtype='int8')
+                    img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 
                 imgs.append(img)
 
@@ -303,7 +308,8 @@ def get_train_dataflow():
         [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
 
     def preprocess(img):
-        fname, boxes, klass, is_crowd = img['file_name'], img['boxes'], img['class'], img['is_crowd']
+        fname, boxes, klass, is_crowd, re_id_class = img['file_name'], img['boxes'], \
+                                                     img['class'], img['is_crowd'], img['re_id_class']
         boxes = np.copy(boxes)
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
         assert im is not None, fname
@@ -332,7 +338,7 @@ def get_train_dataflow():
             log_once("Input {} is filtered for training: {}".format(fname, str(e)), 'warn')
             return None
 
-        ret = [im] + list(anchor_inputs) + [boxes, klass]
+        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class]
 
         return ret
 

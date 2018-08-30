@@ -4,6 +4,7 @@ import tensorflow as tf
 
 from tensorpack import *
 from tensorpack.tfutils.summary import add_moving_summary
+import tensorpack.utils.viz as tpviz
 
 from basemodel import (image_preprocess, resnet_c4_backbone,
                         resnet_conv5,)
@@ -161,14 +162,18 @@ class ResNetC4Model(DetectionModel):
 
             add_moving_summary(total_cost, wd_cost)
             return total_cost
+        else:
+            final_boxes, final_labels = self.fastrcnn_inference(
+                image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
 
-# def offline_evaluate(pred_func, output_file):
-#     df = get_eval_dataflow()
-#     all_results = eval_coco(
-#         df, lambda img: detect_one_image(img, pred_func))
-#     with open(output_file, 'w') as f:
-#         json.dump(all_results, f)
-#     print_evaluation_scores(output_file)
+
+def offline_evaluate(pred_func, output_file):
+    df = get_eval_dataflow()
+    all_results = eval_coco(
+        df, lambda img: detect_one_image(img, pred_func))
+    with open(output_file, 'w') as f:
+        json.dump(all_results, f)
+    print_evaluation_scores(output_file)
 
 
 def predict(pred_func, input_file):
@@ -207,10 +212,11 @@ class EvalCallback(Callback):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--modeldir')
+    parser.add_argument('--modeldir', help='load a model for evaluation or training. Can overwrite BACKBONE.WEIGHTS')
     parser.add_argument('--logdir', default='train_log/fasterrcnn')
-    parser.add_argument('--evaluate')
-    parser.add_argument('--predict')
+    parser.add_argument('--evaluate', help="Run evaluation on PRW. "
+                                           "This argument is the path to the output json results file")
+    parser.add_argument('--predict', help='Single image inference.')
     parser.add_argument('--config', nargs='+')
 
     args = parser.parse_args()
@@ -233,7 +239,7 @@ if __name__ == '__main__':
                 output_names=MODEL.get_inference_tensor_names()[1]))
         if args.evaluate:
             assert args.evaluate.endswith('.json'), args.evaluate
-            # offline_evaluate(pred, args.evaluate)
+            offline_evaluate(pred, args.evaluate)
         elif args.predict:
             predict(pred, args.predict)
     else:
