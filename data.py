@@ -30,6 +30,7 @@ class PRWDataset(object):
         self._basedir = basedir
         self._imgdir = pjoin(basedir, 'frames')
         self._annodir = pjoin(basedir, 'annotations')
+        cfg.DATA.CLASS_NAMES = ['BG', 'pedestrian']
 
     def load(self, split_set='train'):
         """

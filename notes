@@ -31,3 +31,5 @@ BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
 python3 train.py --config DATA.BASEDIR=../PRW-v16.04.20 BACKBONE.WEIGHTS=ckpt/frcnn_08_30_05/model-170000 --predict=../PRW-v16.04.20/frames/ --random_predict
 
 python3 train.py --modeldir=ckpt/frcnn_08_30_05/model-170000 --predict=../PRW-v16.04.20/frames/ --random_predict
+
+python3 train.py --modeldir=train_log/frcnn_08_30_05/model-170000 --predict=/scratch3/yingges/data/PRW-v16.04.20/frames --random_predict
