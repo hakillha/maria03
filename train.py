@@ -243,6 +243,8 @@ class EvalCallback(Callback):
         interval = max(self.trainer.max_epoch // (num_eval + 1), 1)
         self.epochs_to_eval = set([interval * k for k in range(1, num_eval + 1)])
         self.epochs_to_eval.add(self.trainer.max_epoch)
+        # for debug purpose
+        self.epochs_to_eval.update([0, 1])
         if len(self.epochs_to_eval) < 15:
             logger.info("[EvalCallback] Will evaluate at epoch " + str(sorted(self.epochs_to_eval)))
         else:

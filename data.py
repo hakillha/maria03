@@ -43,8 +43,8 @@ class PRWDataset(object):
                 and (if split_set is 'train') 'boxes', 'class', 'is_crowd'.
         """
         with timed_operation('Load Groundtruth Boxes...'):
-            train_frame_list_mat = scipy.io.loadmat(pjoin(self._basedir, 'frame_' + split_set + '.mat'))
-            train_frame_list = train_frame_list_mat['img_index_' + split_set]
+            frame_list_mat = scipy.io.loadmat(pjoin(self._basedir, 'frame_' + split_set + '.mat'))
+            frame_list = train_frame_list_mat['img_index_' + split_set]
 
             imgs = []
             imgs_without_fg = 0
@@ -62,51 +62,52 @@ class PRWDataset(object):
                     img['height'] = 1080
                     img['width'] = 1920
 
-                if split_set=='train':
-                    anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
-                    if 'box_new' in anno_data:
-                        gt_bb_array = anno_data['box_new']
-                    elif 'anno_file' in anno_data:
-                        gt_bb_array = anno_data['anno_file']
-                    else:
-                        raise Exception(frame[0][0] + ' bounding boxes info missing!')
+                anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
+                if 'box_new' in anno_data:
+                    gt_bb_array = anno_data['box_new']
+                elif 'anno_file' in anno_data:
+                    gt_bb_array = anno_data['anno_file']
+                elif 'anno_previous' in anno_data:
+                    gt_bb = anno_data['anno_previous']
+                else:
+                    raise Exception(frame[0][0] + ' bounding boxes info missing!')
 
-                    # if true, include gts that are bg as well
-                    # todo: since this option will rarely be used, re-id class not added yet
-                    include_all = False
-                    if include_all:
-                        img['boxes'] = []
-                        for bb in gt_bb_array[:, 1:]:
-                            box = FloatBox(bb[0], bb[1], bb[2], bb[3])
+                # if true, include gts that are bg as well
+                # todo: since this option will rarely be used, re-id class not added yet
+                include_all = False
+                if include_all:
+                    img['boxes'] = []
+                    for bb in gt_bb_array[:, 1:]:
+                        box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
+                        box.clip_by_shape([img['height'], img['width']])
+                        img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+
+                    img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
+                    img['re_id_class'][img['re_id_class'] == -1] = 1
+                else:
+                    img['boxes'] = []
+                    # the 2-class detection class, pedestrian/bg
+                    img['class'] = []
+                    img['re_id_class'] = []
+                    for bb in gt_bb_array:
+                        if bb[0] != -2:
+                            box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
                             box.clip_by_shape([img['height'], img['width']])
                             img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-
-                        img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
-                        img['re_id_class'][img['re_id_class'] == -1] = 1
-                    else:
-                        img['boxes'] = []
-                        # the 2-class detection class, pedestrian/bg
-                        img['class'] = []
-                        img['re_id_class'] = []
-                        for bb in gt_bb_array:
-                            if bb[0] != -2:
-                                box = FloatBox(bb[1], bb[2], bb[3], bb[4])
-                                box.clip_by_shape([img['height'], img['width']])
-                                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                                img['class'].append(1)
-                                img['re_id_class'].append(bb[0])
-                            else:
-                                continue
-
-                        if len(img['boxes']) == 0:
-                            imgs_without_fg += 1
+                            img['class'].append(1)
+                            img['re_id_class'].append(bb[0])
+                        else:
                             continue
-                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-                        img['class'] = np.asarray(img['class'], dtype='int32')
-                        img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
 
-                    img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
+                    if len(img['boxes']) == 0:
+                        imgs_without_fg += 1
+                        continue
+                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                    img['class'] = np.asarray(img['class'], dtype='int32')
+                    img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
+
+                img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 
                 imgs.append(img)
 
@@ -348,7 +349,7 @@ def get_train_dataflow():
     ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
     return ds
 
-def get_eval_data_flow(shard=0, num_shards=1):
+def get_eval_dataflow(shard=0, num_shards=1):
     """
     Args:
         shard, num_shards: to get subset of evaluation data
