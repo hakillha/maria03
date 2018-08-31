@@ -13,9 +13,10 @@ from config import finalize_configs, config as cfg
 from data import (get_train_dataflow, get_all_anchors,)
 from eval import (detect_one_image)
 from model_box import (RPNAnchors, roi_align,
-                        encode_bbox_target, crop_and_resize,)
+                       encode_bbox_target, crop_and_resize,
+                       decode_bbox_target)
 from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
-                            fastrcnn_losses,)
+                         fastrcnn_losses, fastrcnn_predictions)
 from model_rpn import (rpn_head, generate_rpn_proposals,
                         rpn_losses,)
 from viz import draw_final_outputs
@@ -67,6 +68,39 @@ class DetectionModel(ModelDesc):
             encoded_boxes,
             fg_rcnn_box_logits)
         return fastrcnn_label_loss, fastrcnn_box_loss
+
+    def fastrcnn_inference(self, image_shape2d,
+                           rcnn_boxes, rcnn_label_logits, rcnn_box_logits):
+        """
+        Args:
+            image_shape2d: h, w
+            rcnn_boxes (nx4): the proposal boxes
+            rcnn_label_logits (n):
+            rcnn_box_logits (nx #class x 4):
+
+        Returns:
+            boxes (mx4):
+            labels (m): each >= 1
+        """
+        rcnn_box_logits = rcnn_box_logits[:, 1:, :] # throw away the bg logit
+        # we can see the bg is not included as a class here
+        # print(rcnn_box_logits.shape)
+        rcnn_box_logits.set_shape([None, cfg.DATA.NUM_CATEGORY, None])
+        # print(rcnn_label_logits.shape)
+        # tf.nn.softmax has a default -1 (last) axis
+        label_probs = tf.nn.softmax(rcnn_label_logits, name='fastrcnn_all_probs')  # #proposal x #Class
+        anchors = tf.tile(tf.expand_dims(rcnn_boxes, 1), [1, cfg.DATA.NUM_CATEGORY, 1])   # #proposal x #Cat x 4
+        decoded_boxes = decode_bbox_target(
+            rcnn_box_logits /
+            tf.constant(cfg.FRCNN.BBOX_REG_WEIGHTS, dtype=tf.float32), anchors)
+        decoded_boxes = clip_boxes(decoded_boxes, image_shape2d, name='fastrcnn_all_boxes')
+
+        # indices: Nx2. Each index into (#proposal, #category)
+        pred_indices, final_probs = fastrcnn_predictions(decoded_boxes, label_probs)
+        final_probs = tf.identity(final_probs, 'final_probs')
+        final_boxes = tf.gather_nd(decoded_boxes, pred_indices, name='final_boxes')
+        final_labels = tf.add(pred_indices[:, 1], 1, name='final_labels')
+        return final_boxes, final_labels
 
     def get_inference_tensor_names(self):
         """
@@ -243,7 +277,7 @@ if __name__ == '__main__':
         elif args.predict:
             predict(pred, args.predict)
     else:
-        logger.set_logger_dir(args.logdir, 'd')
+        logger.set_logger_dir(args.logdir, 'b')
 
         finalize_configs(is_training=True)
         stepnum = cfg.TRAIN.STEPS_PER_EPOCH

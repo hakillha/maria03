@@ -20,3 +20,8 @@ python3 train.py --config \
 DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 \
 BACKBONE.WEIGHTS=ckpt/COCO-R50C4-MaskRCNN-Standard.npz \
 --logdir=train_log/frcnn_08_30_03
+
+python3 train.py --config \
+DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 \
+BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
+--logdir=train_log/frcnn_08_30_06

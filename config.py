@@ -137,6 +137,15 @@ _C.FRCNN.BBOX_REG_WEIGHTS = [10., 10., 5., 5.]  # Better but non-standard settin
 _C.FRCNN.FG_THRESH = 0.5
 _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 
+# testing -----------------------
+_C.TEST.FRCNN_NMS_THRESH = 0.5
+
+# Smaller threshold value gives significantly better mAP. But we use 0.05 for consistency with Detectron.
+# mAP with 1e-4 threshold can be found at https://github.com/tensorpack/tensorpack/commit/26321ae58120af2568bdbf2269f32aa708d425a8#diff-61085c48abee915b584027e1085e1043  # noqa
+_C.TEST.RESULT_SCORE_THRESH = 0.05
+_C.TEST.RESULT_SCORE_THRESH_VIS = 0.3   # only visualize confident results
+_C.TEST.RESULTS_PER_IM = 100
+
 def finalize_configs(is_training):
     """
     Run some sanity checks, and populate some configs from others
