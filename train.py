@@ -281,6 +281,7 @@ if __name__ == '__main__':
             assert args.evaluate.endswith('.json'), args.evaluate
             offline_evaluate(pred, args.evaluate)
         elif args.predict:
+            cfg.DATA.CLASS_NAMES = ['BG', 'pedestrian']
             if args.random_predict:
                 predict_file_list = os.listdir(args.predict)
                 predict_file = os.path.join(args.predict, predict_file_list[random.randint(0, len(predict_file_list))])
