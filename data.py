@@ -44,13 +44,13 @@ class PRWDataset(object):
         """
         with timed_operation('Load Groundtruth Boxes...'):
             frame_list_mat = scipy.io.loadmat(pjoin(self._basedir, 'frame_' + split_set + '.mat'))
-            frame_list = train_frame_list_mat['img_index_' + split_set]
+            frame_list = frame_list_mat['img_index_' + split_set]
 
             imgs = []
             imgs_without_fg = 0
 
             # each iteration only reads one file so it's faster
-            for idx, frame in enumerate(train_frame_list):
+            for idx, frame in enumerate(frame_list):
                 img = {}
 
                 self._use_absolute_file_name(img, frame[0][0])
