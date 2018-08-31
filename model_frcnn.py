@@ -190,16 +190,24 @@ def fastrcnn_predictions(boxes, probs):
             default_value=False)
         return mask
 
+    # second dimension is still n, but the sparse vector
+    # only has cfg.TEST.RESULTS_PER_IM True entries?
     masks = tf.map_fn(f, (probs, boxes), dtype=tf.bool,
                       parallel_iterations=10)     # #cat x N
-    selected_indices = tf.where(masks)  # #selection x 2, each is (cat_id, box_id)
+    # print length of selected_indices
+    # better interpreted as selected_cordinates
+    # #selection(x#cat(across classes)) x 2, each is (cat_id, box_id)
+    selected_indices = tf.where(masks)
+    # #selection x 1
     probs = tf.boolean_mask(probs, masks)
 
     # filter again by sorting scores
+    # result is cat x #top values?
     topk_probs, topk_indices = tf.nn.top_k(
         probs,
         tf.minimum(cfg.TEST.RESULTS_PER_IM, tf.size(probs)),
         sorted=False)
     filtered_selection = tf.gather(selected_indices, topk_indices)
+    # transform back to correspond to nx#cat
     filtered_selection = tf.reverse(filtered_selection, axis=[1], name='filtered_indices')
     return filtered_selection, topk_probs
