@@ -237,7 +237,7 @@ if __name__ == '__main__':
         elif args.predict:
             predict(pred, args.predict)
     else:
-        logger.set_logger_dir(args.logdir, 'd')
+        logger.set_logger_dir(args.logdir, 'b')
 
         finalize_configs(is_training=True)
         stepnum = cfg.TRAIN.STEPS_PER_EPOCH
