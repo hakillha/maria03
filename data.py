@@ -7,7 +7,7 @@ import scipy.io
 import tqdm
 
 from tensorpack.dataflow import (imgaug, MultiProcessMapDataZMQ,
-                                 DataFromList,)
+                                 DataFromList, MapDataComponent)
 from tensorpack.utils.argtools import memoized
 from tensorpack.utils.rect import FloatBox
 from tensorpack.utils.timer import timed_operation
@@ -30,7 +30,8 @@ class PRWDataset(object):
         self._basedir = basedir
         self._imgdir = pjoin(basedir, 'frames')
         self._annodir = pjoin(basedir, 'annotations')
-        # cfg.DATA.CLASS_NAMES = ['BG', 'pedestrian']
+        if not cfg.DATA.CLASS_NAMES:
+            cfg.DATA.CLASS_NAMES = ['BG', 'pedestrian']
 
     def load(self, split_set='train'):
         """
@@ -347,7 +348,7 @@ def get_train_dataflow():
         return ret
 
     ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
-    return ds
+    return ds 
 
 def get_eval_dataflow(shard=0, num_shards=1):
     """
@@ -361,7 +362,8 @@ def get_eval_dataflow(shard=0, num_shards=1):
     img_range = (shard * img_per_shard, (shard + 1) * img_per_shard if shard + 1 < num_shards else num_imgs)
 
     # no filter for training
-    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], 'file_name')
+    # test if it can repeat keys
+    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], ['file_name', 'file_name'])
 
     def f(fname):
         im = cv2.imread(fname, cv2.IMREAD_COLOR)

@@ -5,6 +5,8 @@ import os
 import os.path
 import random
 import tensorflow as tf
+import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 from tensorpack import *
 from tensorpack.tfutils.summary import add_moving_summary
@@ -14,8 +16,9 @@ from basemodel import (image_preprocess, resnet_c4_backbone,
                         resnet_conv5,)
 from config import finalize_configs, config as cfg
 # from data import PRWDataset
-from data import (get_train_dataflow, get_all_anchors,)
-from eval import (detect_one_image)
+from data import (get_train_dataflow, get_all_anchors,
+                  get_eval_dataflow)
+from eval import (detect_one_image, eval_output)
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
@@ -235,8 +238,13 @@ class EvalCallback(Callback):
         num_gpu = cfg.TRAIN.NUM_GPUS
         # Use two predictor threads per GPU to get better throughput
         self.num_predictor = num_gpu * 2
+        self.predictors = [self._build_predictor(k % num_gpu) for k in range(self.num_predictor)]
         self.dataflows = [get_eval_dataflow(shard=k, num_shards=self.num_predictor)
                           for k in range(self.num_predictor)]
+
+    def _build_predictor(self, idx):
+        graph_func = self.trainer.get_predictor(self._in_names, self._out_names, device=idx)
+        return lambda img: detect_one_image(img, graph_func)
 
     def _before_train(self):
         num_eval = cfg.TRAIN.NUM_EVALS
@@ -250,6 +258,29 @@ class EvalCallback(Callback):
         else:
             logger.info("[EvalCallback] Will evaluate every {} epochs".format(interval))
 
+    def _eval(self):
+        with ThreadPoolExecutor(max_workers=self.num_predictor, thread_name_prefix='EvalWorker') as executor, \
+                tqdm.tqdm(total=sum([df.size() for df in self.dataflows])) as pbar:
+            futures = []
+            for dataflow, pred in zip(self.dataflows, self.predictors):
+                futures.append(executor.submit(eval_output, dataflow, pred, pbar))
+            all_results = list(itertools.chain(*[fut.result() for fut in futures]))
+
+        output_file = os.path.join(
+            logger.get_logger_dir(), 'outputs{}.json'.format(self.global_step))
+        with open(output_file, 'w') as f:
+            json.dump(all_results, f)
+        # try:
+        #     scores = print_evaluation_scores(output_file)
+        #     for k, v in scores.items():
+        #         self.trainer.monitors.put_scalar(k, v)
+        # except Exception:
+        #     logger.exception("Exception in COCO evaluation.")
+
+    def _trigger_epoch(self):
+        if self.epoch_num in self.epochs_to_eval:
+            self._eval()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -260,6 +291,7 @@ if __name__ == '__main__':
     parser.add_argument('--predict', help='Single image inference. This argument points to a image file or folder.')
     parser.add_argument('--random_predict', action='store_true')
     parser.add_argument('--config', nargs='+')
+    parser.add_argument('--debug_mode', action='store_true')
 
     args = parser.parse_args()
     if args.config:
@@ -321,7 +353,7 @@ if __name__ == '__main__':
             ScheduledHyperParamSetter(
                 'learning_rate', warmup_schedule, interp='linear', step_based=True),
             ScheduledHyperParamSetter('learning_rate', lr_schedule),
-            # EvalCallback(*MODEL.get_inference_tensor_names()),
+            EvalCallback(*MODEL.get_inference_tensor_names()),
             PeakMemoryTracker(),
             EstimatedTimeLeft(median=True),
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
@@ -333,31 +365,39 @@ if __name__ == '__main__':
         else:
             session_init = get_model_loader(cfg.BACKBONE.WEIGHTS) if cfg.BACKBONE.WEIGHTS else None
 
-        dev_test = False
-        if dev_test:
-            df = get_train_dataflow()
+        debug_mode = args.debug_mode
+        if debug_mode:
+            # test01
+            # df = get_train_dataflow()
+            # df.reset_state()
+            # df_gen = df.get_data()
+            # with TowerContext('', is_training=True):
+            #     model = ResNetC4Model()
+            #     input_handle = model.inputs()
+            #     ret_handle = model.build_graph(*input_handle)
+
+            # with tf.Session() as sess:
+            #     sess.run(tf.global_variables_initializer())
+            #     session_init._run_init(sess)
+
+            #     for _ in range(1000):
+            #         image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
+            #         input_dict = {input_handle[0]: image,
+            #                         input_handle[1]: anchor_labels,
+            #                         input_handle[2]: anchor_boxes,
+            #                         input_handle[3]: gt_boxes,
+            #                         input_handle[4]: gt_labels,}
+            #         ret = sess.run(ret_handle, input_dict)
+            #         print(ret)
+            #         # for i in ret[1]:
+            #         #     print(i)
+
+            # test02
+            df = get_eval_dataflow()
             df.reset_state()
             df_gen = df.get_data()
-            with TowerContext('', is_training=True):
-                model = ResNetC4Model()
-                input_handle = model.inputs()
-                ret_handle = model.build_graph(*input_handle)
-
-            with tf.Session() as sess:
-                sess.run(tf.global_variables_initializer())
-                session_init._run_init(sess)
-
-                for _ in range(1000):
-                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
-                    input_dict = {input_handle[0]: image,
-                                    input_handle[1]: anchor_labels,
-                                    input_handle[2]: anchor_boxes,
-                                    input_handle[3]: gt_boxes,
-                                    input_handle[4]: gt_labels,}
-                    ret = sess.run(ret_handle, input_dict)
-                    print(ret)
-                    # for i in ret[1]:
-                    #     print(i)
+            for _ in range(10):
+                print(next(df_gen))
         else:
             traincfg = TrainConfig(
                 model=MODEL,
