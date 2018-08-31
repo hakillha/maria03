@@ -25,3 +25,7 @@ python3 train.py --config \
 DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 \
 BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
 --logdir=train_log/frcnn_08_30_06
+
+python3 train.py --config DATA.BASEDIR=../PRW-v16.04.20 BACKBONE.WEIGHTS=ckpt/frcnn_08_30_05/model-170000 --predict=../PRW-v16.04.20/frames/ --random_predict
+
+python3 train.py --modeldir=ckpt/frcnn_08_30_05/model-170000 --predict=../PRW-v16.04.20/frames/ --random_predict

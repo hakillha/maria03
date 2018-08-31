@@ -67,6 +67,8 @@ class PRWDataset(object):
                         gt_bb_array = anno_data['box_new']
                     elif 'anno_file' in anno_data:
                         gt_bb_array = anno_data['anno_file']
+                    else:
+                        raise Exception(frame[0][0] + ' bounding boxes info missing!')
 
                     # if true, include gts that are bg as well
                     # todo: since this option will rarely be used, re-id class not added yet

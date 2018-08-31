@@ -1,5 +1,9 @@
 import argparse
+import cv2
 import numpy as np
+import os
+import os.path
+import random
 import tensorflow as tf
 
 from tensorpack import *
@@ -14,7 +18,7 @@ from data import (get_train_dataflow, get_all_anchors,)
 from eval import (detect_one_image)
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
-                       decode_bbox_target)
+                       decode_bbox_target,clip_boxes)
 from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
                          fastrcnn_losses, fastrcnn_predictions)
 from model_rpn import (rpn_head, generate_rpn_proposals,
@@ -209,13 +213,14 @@ def offline_evaluate(pred_func, output_file):
         json.dump(all_results, f)
     print_evaluation_scores(output_file)
 
-
 def predict(pred_func, input_file):
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
     results = detect_one_image(img, pred_func)
     final = draw_final_outputs(img, results)
     viz = np.concatenate((img, final), axis=1)
-    tpviz.interactive_imshow(viz)
+    # tpviz.interactive_imshow(viz)
+    cv2.imwrite('test01.png', viz)
+
 
 class EvalCallback(Callback):
     """
@@ -248,9 +253,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--modeldir', help='load a model for evaluation or training. Can overwrite BACKBONE.WEIGHTS')
     parser.add_argument('--logdir', default='train_log/fasterrcnn')
-    parser.add_argument('--evaluate', help="Run evaluation on PRW. "
-                                           "This argument is the path to the output json results file")
-    parser.add_argument('--predict', help='Single image inference.')
+    parser.add_argument('--evaluate', help='Run evaluation on PRW. '
+                                           'This argument is the path to the output json results file')
+    parser.add_argument('--predict', help='Single image inference. This argument points to a image file or folder.')
+    parser.add_argument('--random_predict', action='store_true')
     parser.add_argument('--config', nargs='+')
 
     args = parser.parse_args()
@@ -268,14 +274,20 @@ if __name__ == '__main__':
 
         pred = OfflinePredictor(PredictConfig(
                 model=MODEL,
-                session_init=get_model_loader(args.load),
+                session_init=get_model_loader(args.modeldir),
                 input_names=MODEL.get_inference_tensor_names()[0],
                 output_names=MODEL.get_inference_tensor_names()[1]))
         if args.evaluate:
             assert args.evaluate.endswith('.json'), args.evaluate
             offline_evaluate(pred, args.evaluate)
         elif args.predict:
-            predict(pred, args.predict)
+            if args.random_predict:
+                predict_file_list = os.listdir(args.predict)
+                predict_file = os.path.join(args.predict, predict_file_list[random.randint(0, len(predict_file_list))])
+                print(predict_file)
+                predict(pred, predict_file)
+            else:
+                predict(pred, args.predict)
     else:
         logger.set_logger_dir(args.logdir, 'b')
 
