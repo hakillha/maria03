@@ -64,18 +64,22 @@ def eval_output(df, detect_func, tqdm_bar=None):
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
         for img, img_fname in df.get_data():
             results = detect_func(img)
+
+            result_list = []
+            result_list.append(img_fname)
+
+            bb_list = []
+            label_list = []
+            score_list = []
             for r in results:
                 box = r.box
-                cat_name = cfg.DATA.CLASS_NAMES[r.class_id]
-
-                res = {
-                    'image_filename': img_fname,
-                    'category_name': cat_name,
-                    'bbox': list(map(lambda x: round(float(x), 2), box)),
-                    'score': round(float(r.score), 3),
-                }
-
-                # also append segmentation to results
-                all_results.append(res)
+                bb_list.append(list(map(lambda x: round(float(x), 2), box)))
+                label_list.append(r.class_id)
+                score_list.append(round(float(r.score), 3))
+            result_list.append(np.array(bb_list, dtype=np.float32))
+            result_list.append(np.array(label_list, dtype=np.int16))
+            result_list.append(np.array(score_list, dtype=np.float32))
+                
+            all_results.append(result_list)
             tqdm_bar.update(1)
     return all_results
