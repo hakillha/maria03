@@ -212,11 +212,11 @@ class ResNetC4Model(DetectionModel):
 
 def offline_evaluate(pred_func, output_file):
     df = get_eval_dataflow()
-    all_results = eval_coco(
+    all_results = eval_output(
         df, lambda img: detect_one_image(img, pred_func))
     with open(output_file, 'w') as f:
         json.dump(all_results, f)
-    print_evaluation_scores(output_file)
+    # print_evaluation_scores(output_file)
 
 def predict(pred_func, input_file):
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
@@ -254,7 +254,7 @@ class EvalCallback(Callback):
         self.epochs_to_eval = set([interval * k for k in range(1, num_eval + 1)])
         self.epochs_to_eval.add(self.trainer.max_epoch)
         # for debug purpose
-        self.epochs_to_eval.update([0, 1])
+        # self.epochs_to_eval.update([0, 1])
         if len(self.epochs_to_eval) < 15:
             logger.info("[EvalCallback] Will evaluate at epoch " + str(sorted(self.epochs_to_eval)))
         else:

@@ -8,7 +8,7 @@ source activate tensorpack02
 cd ~/2018Q2/thesis/maria03
 
 python3 train.py --config \
-DATA.BASEDIR=/scratch3/yingges/data/PRW-v16.04.20/ \
+DATA.BASEDIR=/scratch3/yingges/data/prw/PRW-v16.04.20/ \
 BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
 --logdir=train_log/01
 
