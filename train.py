@@ -1,5 +1,7 @@
 import argparse
 import cv2
+import itertools
+import json
 import numpy as np
 import os
 import os.path
@@ -259,7 +261,9 @@ class EvalCallback(Callback):
             logger.info("[EvalCallback] Will evaluate every {} epochs".format(interval))
 
     def _eval(self):
-        with ThreadPoolExecutor(max_workers=self.num_predictor, thread_name_prefix='EvalWorker') as executor, \
+        # with ThreadPoolExecutor(max_workers=self.num_predictor, thread_name_prefix='EvalWorker') as executor, \
+        # compatible with python 3.5
+        with ThreadPoolExecutor(max_workers=self.num_predictor) as executor, \
                 tqdm.tqdm(total=sum([df.size() for df in self.dataflows])) as pbar:
             futures = []
             for dataflow, pred in zip(self.dataflows, self.predictors):
@@ -398,6 +402,8 @@ if __name__ == '__main__':
             df_gen = df.get_data()
             for _ in range(10):
                 print(next(df_gen))
+
+            # test02
         else:
             traincfg = TrainConfig(
                 model=MODEL,
