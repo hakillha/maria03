@@ -1,6 +1,9 @@
 import numpy as np
+import tqdm
 from collections import namedtuple
 from contextlib import ExitStack
+
+from tensorpack.utils.utils import get_tqdm_kwargs
 
 from common import CustomResize, clip_boxes
 from config import config as cfg
