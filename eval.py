@@ -76,9 +76,9 @@ def eval_output(df, detect_func, tqdm_bar=None):
                 bb_list.append(list(map(lambda x: round(float(x), 2), box)))
                 label_list.append(r.class_id)
                 score_list.append(round(float(r.score), 3))
-            result_list.append(np.array(bb_list, dtype=np.float32))
-            result_list.append(np.array(label_list, dtype=np.int16))
-            result_list.append(np.array(score_list, dtype=np.float32))
+            result_list.append(bb_list)
+            result_list.append(label_list)
+            result_list.append(score_list)
                 
             all_results.append(result_list)
             tqdm_bar.update(1)
