@@ -7,6 +7,7 @@ from os.path import join as pjoin
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', default='/home/yingges/Desktop/Research/thesis01/PRW-v16.04.20')
+    parser.add_argument('--output_dir_postfix', default='')
     args = parser.parse_args()
 
     test_frame_list_mat = scipy.io.loadmat(pjoin(args.data_dir, 'frame_test.mat'))
@@ -14,7 +15,7 @@ if __name__ == '__main__':
     # print(test_frame_list_mat)
 
     try:
-        output_dir = pjoin(args.data_dir, 'converted_annotations')
+        output_dir = pjoin(args.data_dir, 'converted_annotations' + args.output_dir_postfix)
         os.mkdir(output_dir)
     except OSError:
         print('Output folder already exists.')
@@ -31,8 +32,8 @@ if __name__ == '__main__':
         else:
             raise Exception(frame[0][0] + ' bounding boxes info missing!')
 
-        skip_bg_frame = True
-        if skip_bg_frame:
+        include_all = True
+        if not include_all:
             if len(gt_bb[gt_bb[:,0] != -2]) == 0:
                 print('Skiping a frame w/o fg objects...')
                 continue
@@ -42,8 +43,11 @@ if __name__ == '__main__':
         gt_bb = gt_bb.astype(str)
         with open(pjoin(output_dir, frame[0][0] + '.txt'), 'w') as f:
             for bb in gt_bb:
-                if bb[0] == -2:
-                    f.write(' '.join(['BG', bb[1], bb[2], bb[3], bb[4]]) + '\n')
-                else:
+                if include_all:
                     f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4]]) + '\n')
+                else:
+                    if bb[0] == -2:
+                        f.write(' '.join(['BG', bb[1], bb[2], bb[3], bb[4]]) + '\n')
+                    else:
+                        f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4]]) + '\n')
 

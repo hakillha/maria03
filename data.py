@@ -56,63 +56,66 @@ class PRWDataset(object):
 
                 self._use_absolute_file_name(img, frame[0][0])
 
-                if frame[0][0][1] == '6':
-                    img['height'] = 576
-                    img['width'] = 720
-                else:
-                    img['height'] = 1080
-                    img['width'] = 1920
+                if split_set == 'train':
+                    if frame[0][0][1] == '6':
+                        img['height'] = 576
+                        img['width'] = 720
+                    else:
+                        img['height'] = 1080
+                        img['width'] = 1920
 
-                anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
-                if 'box_new' in anno_data:
-                    gt_bb_array = anno_data['box_new']
-                elif 'anno_file' in anno_data:
-                    gt_bb_array = anno_data['anno_file']
-                elif 'anno_previous' in anno_data:
-                    gt_bb = anno_data['anno_previous']
-                else:
-                    raise Exception(frame[0][0] + ' bounding boxes info missing!')
+                    anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
+                    if 'box_new' in anno_data:
+                        gt_bb_array = anno_data['box_new']
+                    elif 'anno_file' in anno_data:
+                        gt_bb_array = anno_data['anno_file']
+                    elif 'anno_previous' in anno_data:
+                        gt_bb = anno_data['anno_previous']
+                    else:
+                        raise Exception(frame[0][0] + ' bounding boxes info missing!')
 
-                # if true, include gts that are bg as well
-                # todo: since this option will rarely be used, re-id class not added yet
-                include_all = False
-                if include_all:
-                    img['boxes'] = []
-                    for bb in gt_bb_array[:, 1:]:
-                        box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
-                        box.clip_by_shape([img['height'], img['width']])
-                        img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-
-                    img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
-                    img['re_id_class'][img['re_id_class'] == -1] = 1
-                else:
-                    img['boxes'] = []
-                    # the 2-class detection class, pedestrian/bg
-                    img['class'] = []
-                    img['re_id_class'] = []
-                    for bb in gt_bb_array:
-                        if bb[0] != -2:
+                    # if true, include gts that are bg as well
+                    # todo: since this option will rarely be used, re-id class not added yet
+                    include_all = cfg.DATA.INCLUDE_ALL
+                    if include_all:
+                        img['boxes'] = []
+                        for bb in gt_bb_array:
                             box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
                             box.clip_by_shape([img['height'], img['width']])
                             img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                            img['class'].append(1)
-                            img['re_id_class'].append(bb[0])
-                        else:
+                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+
+                        img['class'] = np.ones(len(gt_bb_array))
+
+                        img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
+                        img['re_id_class'][img['re_id_class'] == -1] = 1
+                    else:
+                        img['boxes'] = []
+                        # the 2-class detection class, pedestrian/bg
+                        img['class'] = []
+                        img['re_id_class'] = []
+                        for bb in gt_bb_array:
+                            if bb[0] != -2:
+                                box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
+                                box.clip_by_shape([img['height'], img['width']])
+                                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                                img['class'].append(1)
+                                img['re_id_class'].append(bb[0])
+                            else:
+                                continue
+
+                        if len(img['boxes']) == 0:
+                            imgs_without_fg += 1
                             continue
+                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                        img['class'] = np.asarray(img['class'], dtype='int32')
+                        img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
 
-                    if len(img['boxes']) == 0:
-                        imgs_without_fg += 1
-                        continue
-                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-                    img['class'] = np.asarray(img['class'], dtype='int32')
-                    img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
-
-                img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
+                    img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 
                 imgs.append(img)
 
-            print('Number of images without foreground objects: {}.'.format(imgs_without_fg))
+            print('Number of images without identified pedestrians: {}.'.format(imgs_without_fg))
             return imgs
 
     def _use_absolute_file_name(self, img, file_name):
