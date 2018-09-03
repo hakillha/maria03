@@ -372,36 +372,38 @@ if __name__ == '__main__':
         debug_mode = args.debug_mode
         if debug_mode:
             # test01
-            # df = get_train_dataflow()
-            # df.reset_state()
-            # df_gen = df.get_data()
-            # with TowerContext('', is_training=True):
-            #     model = ResNetC4Model()
-            #     input_handle = model.inputs()
-            #     ret_handle = model.build_graph(*input_handle)
-
-            # with tf.Session() as sess:
-            #     sess.run(tf.global_variables_initializer())
-            #     session_init._run_init(sess)
-
-            #     for _ in range(1000):
-            #         image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
-            #         input_dict = {input_handle[0]: image,
-            #                         input_handle[1]: anchor_labels,
-            #                         input_handle[2]: anchor_boxes,
-            #                         input_handle[3]: gt_boxes,
-            #                         input_handle[4]: gt_labels,}
-            #         ret = sess.run(ret_handle, input_dict)
-            #         print(ret)
-            #         # for i in ret[1]:
-            #         #     print(i)
-
-            # test02
-            df = get_eval_dataflow()
+            df = get_train_dataflow()
             df.reset_state()
             df_gen = df.get_data()
-            for _ in range(10):
-                print(next(df_gen))
+            with TowerContext('', is_training=True):
+                model = ResNetC4Model()
+                input_handle = model.inputs()
+                ret_handle = model.build_graph(*input_handle)
+
+            with tf.Session() as sess:
+                print('Number of trainable parameters: \n')
+                print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
+                # sess.run(tf.global_variables_initializer())
+                # session_init._run_init(sess)
+
+                # for _ in range(1000):
+                #     image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
+                #     input_dict = {input_handle[0]: image,
+                #                     input_handle[1]: anchor_labels,
+                #                     input_handle[2]: anchor_boxes,
+                #                     input_handle[3]: gt_boxes,
+                #                     input_handle[4]: gt_labels,}
+                #     ret = sess.run(ret_handle, input_dict)
+                #     print(ret)
+                    # for i in ret[1]:
+                    #     print(i)
+
+            # test02
+            # df = get_eval_dataflow()
+            # df.reset_state()
+            # df_gen = df.get_data()
+            # for _ in range(10):
+            #     print(next(df_gen))
 
             # test02
         else:
