@@ -320,6 +320,8 @@ def get_train_dataflow():
                                                      img['class'], img['is_crowd'], img['re_id_class']
         boxes = np.copy(boxes)
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        orig_shape = im.shape[:2]
+        orig_im = np.copy(im)
         assert im is not None, fname
         im = im.astype('float32')
         # assume floatbox as input
@@ -346,7 +348,7 @@ def get_train_dataflow():
             log_once("Input {} is filtered for training: {}".format(fname, str(e)), 'warn')
             return None
 
-        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class]
+        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class, orig_shape, orig_im]
 
         return ret
 

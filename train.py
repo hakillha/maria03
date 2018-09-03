@@ -20,7 +20,8 @@ from config import finalize_configs, config as cfg
 # from data import PRWDataset
 from data import (get_train_dataflow, get_all_anchors,
                   get_eval_dataflow)
-from eval import (detect_one_image, eval_output)
+from eval import (detect_one_image, eval_output,
+                  DetectionResult)
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
@@ -29,6 +30,7 @@ from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
 from model_rpn import (rpn_head, generate_rpn_proposals,
                         rpn_losses,)
 from viz import draw_final_outputs
+from utils.box_ops import tf_clip_boxes, pairwise_iou
 
 
 class DetectionModel(ModelDesc):
@@ -109,7 +111,7 @@ class DetectionModel(ModelDesc):
         final_probs = tf.identity(final_probs, 'final_probs')
         final_boxes = tf.gather_nd(decoded_boxes, pred_indices, name='final_boxes')
         final_labels = tf.add(pred_indices[:, 1], 1, name='final_labels')
-        return final_boxes, final_labels
+        return final_boxes, final_labels, final_probs
 
     def get_inference_tensor_names(self):
         """
@@ -131,12 +133,14 @@ class ResNetC4Model(DetectionModel):
             tf.placeholder(tf.int32, (None, None, cfg.RPN.NUM_ANCHOR), 'anchor_labels'),
             tf.placeholder(tf.float32, (None, None, cfg.RPN.NUM_ANCHOR, 4), 'anchor_boxes'),
             tf.placeholder(tf.float32, (None, 4), 'gt_boxes'),
-            tf.placeholder(tf.int64, (None,), 'gt_labels')]  # all > 0
+            tf.placeholder(tf.int64, (None,), 'gt_labels'),  # all > 0
+            tf.placeholder(tf.int64, (None,), 'gt_ids'),
+            tf.placeholder(tf.int64, (2,), 'orig_shape')]
         return ret
 
     def build_graph(self, *inputs):
         is_training = get_current_tower_context().is_training
-        image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = inputs
+        image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape = inputs
         image = self.preprocess(image)     # 1CHW
 
         featuremap = resnet_c4_backbone(image, cfg.BACKBONE.RESNET_NUM_BLOCK[:3])
@@ -194,6 +198,36 @@ class ResNetC4Model(DetectionModel):
                 image, rcnn_labels, fg_sampled_boxes,
                 matched_gt_boxes, fastrcnn_label_logits, fg_fastrcnn_box_logits)
 
+
+            # acquire pred for re-id training
+            boxes, final_labels, final_probs = self.fastrcnn_inference(
+                image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
+            scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
+                            tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
+            final_boxes = boxes / scale
+            # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
+            final_boxes = tf_clip_boxes(final_boxes, orig_shape)
+
+            # IOU, discard bad dets, assign re-id labels
+            # the results are already NMS so no need to NMS again
+            # crop from conv4 with dets (maybe plus gts)
+            # feedforward re-id branch
+            # resizing during ROIalign?
+            iou = pairwise_iou(boxes, gt_boxes)
+            tp_mask = tf.reduce_max(iou, axis=1) >= cfg.RE_ID.IOU_THRESH
+            iou = tf.boolean_mask(iou, tp_mask)
+            pred_gt_ind = tf.argmax(iou, axis=1)
+            # output following tensors
+            # pick out the -2 class here
+            pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
+            pred_boxes = tf.boolean_mask(boxes, tp_mask)
+            unid_ind = pred_gt_ids != 1
+            pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind)
+            pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
+            # id_roi
+            return pred_gt_ids, pred_boxes
+
+
             wd_cost = regularize_cost(
                 '.*/W', l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
 
@@ -205,8 +239,10 @@ class ResNetC4Model(DetectionModel):
 
             add_moving_summary(total_cost, wd_cost)
             return total_cost
+            # return total_cost, boxes, final_probs, final_labels
+            # return total_cost, final_boxes, final_probs, final_labels
         else:
-            final_boxes, final_labels = self.fastrcnn_inference(
+            final_boxes, final_labels, _ = self.fastrcnn_inference(
                 image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
 
 
@@ -293,6 +329,7 @@ if __name__ == '__main__':
     parser.add_argument('--evaluate', help='Run evaluation on PRW. '
                                            'This argument is the path to the output json results file')
     parser.add_argument('--predict', help='Single image inference. This argument points to a image file or folder.')
+    # parser.add_argument('--re-id_training', action='store_true', default=True)
     parser.add_argument('--random_predict', action='store_true')
     parser.add_argument('--config', nargs='+')
     parser.add_argument('--debug_mode', action='store_true')
@@ -372,29 +409,48 @@ if __name__ == '__main__':
         debug_mode = args.debug_mode
         if debug_mode:
             # test01
-            df = get_train_dataflow()
-            df.reset_state()
-            df_gen = df.get_data()
-            with TowerContext('', is_training=True):
-                model = ResNetC4Model()
-                input_handle = model.inputs()
-                ret_handle = model.build_graph(*input_handle)
+            # df = get_train_dataflow()
+            # df.reset_state()
+            # df_gen = df.get_data()
+            # with TowerContext('', is_training=True):
+            #     model = ResNetC4Model()
+            #     input_handle = model.inputs()
+            #     ret_handle = model.build_graph(*input_handle)
 
-            with tf.Session() as sess:
-                print('Number of trainable parameters: \n')
-                print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
-                # sess.run(tf.global_variables_initializer())
-                # session_init._run_init(sess)
+            # with tf.Session() as sess:
+            #     # print('Number of trainable parameters: \n')
+            #     # print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
 
-                # for _ in range(1000):
-                #     image, anchor_labels, anchor_boxes, gt_boxes, gt_labels = next(df_gen)
-                #     input_dict = {input_handle[0]: image,
-                #                     input_handle[1]: anchor_labels,
-                #                     input_handle[2]: anchor_boxes,
-                #                     input_handle[3]: gt_boxes,
-                #                     input_handle[4]: gt_labels,}
-                #     ret = sess.run(ret_handle, input_dict)
-                #     print(ret)
+
+            #     # sess.run(tf.global_variables_initializer())
+            #     session_init._setup_graph()
+            #     session_init._run_init(sess)
+
+            #     for _ in range(3):
+            #         image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
+            #         image_ = image.astype(np.int16)
+            #         print(image)
+            #         # print(orig_im)
+            #         input_dict = {input_handle[0]: image,
+            #                       input_handle[1]: anchor_labels,
+            #                       input_handle[2]: anchor_boxes,
+            #                       input_handle[3]: gt_boxes,
+            #                       input_handle[4]: gt_labels,
+            #                       input_handle[5]: gt_ids,
+            #                       input_handle[6]: orig_shape}
+            #         ret = sess.run(ret_handle, input_dict)
+            #         # print(ret)
+            #         _, boxes, probs, labels = ret
+            #         results = [DetectionResult(*args) for args in zip(boxes, probs, labels)]
+            #         # final = draw_final_outputs(orig_im, results)
+            #         # viz = np.concatenate((orig_im, final), axis=1)
+            #         # tpviz.interactive_imshow(viz)
+
+            #         final = draw_final_outputs(image_, results)
+            #         viz = np.concatenate((image_, final), axis=1)
+            #         tpviz.interactive_imshow(viz)
+
+                    # print(ret)
                     # for i in ret[1]:
                     #     print(i)
 
@@ -405,7 +461,29 @@ if __name__ == '__main__':
             # for _ in range(10):
             #     print(next(df_gen))
 
-            # test02
+            # basic test
+            df = get_train_dataflow()
+            df.reset_state()
+            df_gen = df.get_data()
+            with TowerContext('', is_training=True):
+                model = ResNetC4Model()
+                input_handle = model.inputs()
+                ret_handle = model.build_graph(*input_handle)
+
+            with tf.Session() as sess:
+                # sess.run(tf.global_variables_initializer())
+                session_init._setup_graph()
+                session_init._run_init(sess)
+                for _ in range(3):
+                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
+                    input_dict = {input_handle[0]: image,
+                                  input_handle[1]: anchor_labels,
+                                  input_handle[2]: anchor_boxes,
+                                  input_handle[3]: gt_boxes,
+                                  input_handle[4]: gt_labels,
+                                  input_handle[5]: gt_ids,
+                                  input_handle[6]: orig_shape}
+                    ret = sess.run(ret_handle, input_dict)
         else:
             traincfg = TrainConfig(
                 model=MODEL,

@@ -37,3 +37,5 @@ python3 train.py --modeldir=train_log/frcnn_08_30_05/model-170000 --predict=/scr
 python train.py --modeldir=train_log/frcnn_prw_08_31_01/model-190000 --evaluate=train_log/eval_test_01.json --config DATA.BASEDIR=/scratch3/yingges/data/prw/PRW-v16.04.20/
 
 python3 train.py --modeldir=ckpt/frcnn_prw_08_31_01/model-180000 --evaluate=train_log/eval_test_01.json --config DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 RPN.TEST_POST_NMS_TOPK=500
+
+python3 train.py --config BACKBONE.WEIGHTS=ckpt/frcnn_prw_inf_01/model-380000 DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 --debug_mode

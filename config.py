@@ -138,6 +138,9 @@ _C.FRCNN.BBOX_REG_WEIGHTS = [10., 10., 5., 5.]  # Better but non-standard settin
 _C.FRCNN.FG_THRESH = 0.5
 _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 
+# re-id branch
+_C.RE_ID.IOU_THRESH = 0.7
+
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5
 
