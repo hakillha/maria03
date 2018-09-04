@@ -292,7 +292,8 @@ class ResNetC4Model(DetectionModel):
                 wd_cost], 'total_cost')
 
             add_moving_summary(total_cost, wd_cost)
-            return total_cost
+            # return total_cost
+            return re_id_loss
             # return total_cost, boxes, final_probs, final_labels
             # return total_cost, final_boxes, final_probs, final_labels
         else:
@@ -540,25 +541,24 @@ if __name__ == '__main__':
 
             # for op in tf.get_default_graph().get_operations():
             #     print(op.name)
+            # for var in tf.trainable_variables():
+            #     print(var.name)
 
-            for var in tf.trainable_variables():
-                print(var.name)
-
-            # with tf.Session() as sess:
-            #     sess.run(tf.global_variables_initializer())
-            #     session_init._setup_graph()
-            #     session_init._run_init(sess)
-            #     for _ in range(3):
-            #         image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
-            #         input_dict = {input_handle[0]: image,
-            #                       input_handle[1]: anchor_labels,
-            #                       input_handle[2]: anchor_boxes,
-            #                       input_handle[3]: gt_boxes,
-            #                       input_handle[4]: gt_labels,
-            #                       input_handle[5]: gt_ids,
-            #                       input_handle[6]: orig_shape}
-            #         ret = sess.run(ret_handle, input_dict)
-            #         print(ret)
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                session_init._setup_graph()
+                session_init._run_init(sess)
+                for _ in range(100):
+                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
+                    input_dict = {input_handle[0]: image,
+                                  input_handle[1]: anchor_labels,
+                                  input_handle[2]: anchor_boxes,
+                                  input_handle[3]: gt_boxes,
+                                  input_handle[4]: gt_labels,
+                                  input_handle[5]: gt_ids,
+                                  input_handle[6]: orig_shape}
+                    ret = sess.run(ret_handle, input_dict)
+                    print(ret)
         else:
             traincfg = TrainConfig(
                 model=MODEL,
