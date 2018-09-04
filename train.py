@@ -240,9 +240,6 @@ class ResNetC4Model(DetectionModel):
                                             labels=pred_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
 
-
-                add_moving_summary(label_loss)
-
                 return label_loss
 
             def check_unid_pedes(iou, gt_ids, boxes, tp_mask,
@@ -280,7 +277,8 @@ class ResNetC4Model(DetectionModel):
             
             # return unid_ind
 
-
+            add_moving_summary(re_id_loss)
+            
             wd_cost = regularize_cost(
                 '.*/W', l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
 
