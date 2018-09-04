@@ -221,23 +221,25 @@ class ResNetC4Model(DetectionModel):
 
             def re_id_loss(pred_boxes, pred_gt_ids,
                            featuremap):
-                boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
-                # name scope?
-                # stop gradient
-                roi_resized = roi_align(featuremap, boxes_on_featuremap, 14)
-                feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
-                feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
+                with tf.variable_scope('id_head'):
+                    boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
+                    # name scope?
+                    # stop gradient
+                    roi_resized = roi_align(featuremap, boxes_on_featuremap, 14)
+                    feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
+                    feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
 
-                init = tf.variance_scaling_initializer()
-                hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                id_logits = FullyConnected(
-                    'class', hidden, cfg.DATA.NUM_ID,
-                    kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+                    init = tf.variance_scaling_initializer()
+                    hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                    hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                    id_logits = FullyConnected(
+                        'class', hidden, cfg.DATA.NUM_ID,
+                        kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
                 label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                                             labels=pred_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
+
 
                 add_moving_summary(label_loss)
 
@@ -296,6 +298,19 @@ class ResNetC4Model(DetectionModel):
         else:
             final_boxes, final_labels, _ = self.fastrcnn_inference(
                 image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
+
+            preds_on_featuremap = final_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
+            # name scope?
+            # stop gradient
+            roi_resized = roi_align(featuremap, preds_on_featuremap, 14)
+            feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
+            feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
+
+            init = tf.variance_scaling_initializer()
+            hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
+            hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+
+
 
 
 def offline_evaluate(pred_func, output_file):
@@ -425,6 +440,7 @@ if __name__ == '__main__':
         # warmup is step based, lr is epoch based
         # why lower lr if gradients are averaged over #gpus
         # also is it a factor that each gpu has a smaller batch relatively
+        # warmup lr?
         init_lr = cfg.TRAIN.BASE_LR * 0.33 * min(8. / cfg.TRAIN.NUM_GPUS, 1.)
         warmup_schedule = [(0, init_lr), (cfg.TRAIN.WARMUP, cfg.TRAIN.BASE_LR)]
         warmup_end_epoch = cfg.TRAIN.WARMUP * 1. / stepnum
@@ -446,7 +462,7 @@ if __name__ == '__main__':
             ScheduledHyperParamSetter(
                 'learning_rate', warmup_schedule, interp='linear', step_based=True),
             ScheduledHyperParamSetter('learning_rate', lr_schedule),
-            EvalCallback(*MODEL.get_inference_tensor_names()),
+            # EvalCallback(*MODEL.get_inference_tensor_names()),
             PeakMemoryTracker(),
             EstimatedTimeLeft(median=True),
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
@@ -522,8 +538,11 @@ if __name__ == '__main__':
                 input_handle = model.inputs()
                 ret_handle = model.build_graph(*input_handle)
 
-            for op in tf.get_default_graph().get_operations():
-                print(op.name)
+            # for op in tf.get_default_graph().get_operations():
+            #     print(op.name)
+
+            for var in tf.trainable_variables():
+                print(var.name)
 
             # with tf.Session() as sess:
             #     sess.run(tf.global_variables_initializer())
