@@ -211,3 +211,38 @@ def fastrcnn_predictions(boxes, probs):
     # transform back to correspond to nx#cat
     filtered_selection = tf.reverse(filtered_selection, axis=[1], name='filtered_indices')
     return filtered_selection, topk_probs
+
+@under_name_scope()
+def fastrcnn_predictions_id(boxes, probs):
+    """
+    Generate final results from predictions of all proposals.
+
+    Args:
+        boxes: n#catx4 floatbox in float32
+        probs: nx#class
+    """
+    assert boxes.shape[1] == cfg.DATA.NUM_CATEGORY
+    assert probs.shape[1] == cfg.DATA.NUM_CLASS
+    boxes = tf.transpose(boxes, [1, 0, 2])  # #catxnx4
+    probs = tf.transpose(probs[:, 1:], [1, 0])  # #catxn
+
+    # second dimension is still n, but the sparse vector
+    # only has cfg.TEST.RESULTS_PER_IM True entries?
+    masks = tf.ones(tf.shape(probs))     # #cat x N
+    # print length of selected_indices
+    # better interpreted as selected_cordinates
+    # #selection(x#cat(across classes)) x 2, each is (cat_id, box_id)
+    selected_indices = tf.where(masks) # mask filters out NMSed indices, selected_indices is the kept indices
+    # #selection x 1
+    probs = tf.boolean_mask(probs, masks) # probs have same id set with selected_indices, so topk_indices must be the subset of selected_indices
+
+    # filter again by sorting scores
+    # result is cat x #top values?
+    topk_probs, topk_indices = tf.nn.top_k(
+        probs,
+        tf.minimum(cfg.TEST.RESULTS_PER_IM, tf.size(probs)),
+        sorted=False)
+    filtered_selection = tf.gather(selected_indices, topk_indices)
+    # transform back to correspond to nx#cat
+    filtered_selection = tf.reverse(filtered_selection, axis=[1], name='filtered_indices')
+    return filtered_selection, topk_probs

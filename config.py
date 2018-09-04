@@ -69,6 +69,7 @@ _C.DATA.NUM_CATEGORY = 1    # 80 categories. Plus bg or not?
 _C.DATA.NUM_ID = 934
 _C.DATA.CLASS_NAMES = []  # NUM_CLASS (NUM_CATEGORY+1) strings, to be populated later by data loader. The first is BG.
 _C.DATA.INCLUDE_ALL = True
+_C.DATA.TEST.SHUFFLE = True
 
 # basemodel ----------------------
 _C.BACKBONE.WEIGHTS = 'ckpt/ImageNet-R50-AlignPadding.npz'   # /path/to/weights.npz

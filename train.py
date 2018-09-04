@@ -27,7 +27,8 @@ from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
 from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
-                         fastrcnn_losses, fastrcnn_predictions)
+                         fastrcnn_losses, fastrcnn_predictions,
+                         fastrcnn_predictions_id)
 from model_rpn import (rpn_head, generate_rpn_proposals,
                         rpn_losses,)
 from viz import draw_final_outputs
@@ -109,6 +110,39 @@ class DetectionModel(ModelDesc):
 
         # indices: Nx2. Each index into (#proposal, #category)
         pred_indices, final_probs = fastrcnn_predictions(decoded_boxes, label_probs)
+        final_probs = tf.identity(final_probs, 'final_probs')
+        final_boxes = tf.gather_nd(decoded_boxes, pred_indices, name='final_boxes')
+        final_labels = tf.add(pred_indices[:, 1], 1, name='final_labels')
+        return final_boxes, final_labels, final_probs
+
+    def fastrcnn_inference_id(self, image_shape2d,
+                              rcnn_boxes, rcnn_label_logits, rcnn_box_logits):
+        """
+        Args:
+            image_shape2d: h, w
+            rcnn_boxes (nx4): the proposal boxes
+            rcnn_label_logits (n):
+            rcnn_box_logits (nx #class x 4):
+
+        Returns:
+            boxes (mx4):
+            labels (m): each >= 1
+        """
+        rcnn_box_logits = rcnn_box_logits[:, 1:, :] # throw away the bg logit
+        # we can see the bg is not included as a class here
+        # print(rcnn_box_logits.shape)
+        rcnn_box_logits.set_shape([None, cfg.DATA.NUM_CATEGORY, None])
+        # print(rcnn_label_logits.shape)
+        # tf.nn.softmax has a default -1 (last) axis
+        label_probs = tf.nn.softmax(rcnn_label_logits, name='fastrcnn_all_probs')  # #proposal x #Class
+        anchors = tf.tile(tf.expand_dims(rcnn_boxes, 1), [1, cfg.DATA.NUM_CATEGORY, 1])   # #proposal x #Cat x 4
+        decoded_boxes = decode_bbox_target(
+            rcnn_box_logits /
+            tf.constant(cfg.FRCNN.BBOX_REG_WEIGHTS, dtype=tf.float32), anchors)
+        decoded_boxes = clip_boxes(decoded_boxes, image_shape2d, name='fastrcnn_all_boxes')
+
+        # indices: Nx2. Each index into (#proposal, #category)
+        pred_indices, final_probs = fastrcnn_predictions_id(decoded_boxes, label_probs)
         final_probs = tf.identity(final_probs, 'final_probs')
         final_boxes = tf.gather_nd(decoded_boxes, pred_indices, name='final_boxes')
         final_labels = tf.add(pred_indices[:, 1], 1, name='final_labels')
@@ -280,6 +314,9 @@ class ResNetC4Model(DetectionModel):
             
             # return unid_ind
 
+            return tf.shape(iou)[0]
+
+            tf.divide(re_id_loss, 9.0, 're_id_loss')
             add_moving_summary(re_id_loss)
 
             wd_cost = regularize_cost(
@@ -293,8 +330,8 @@ class ResNetC4Model(DetectionModel):
                 wd_cost], 'total_cost')
 
             add_moving_summary(total_cost, wd_cost)
-            # return total_cost
-            return re_id_loss
+            return total_cost
+            # return re_id_loss
             # return total_cost, boxes, final_probs, final_labels
             # return total_cost, final_boxes, final_probs, final_labels
         else:
@@ -559,7 +596,7 @@ if __name__ == '__main__':
                                   input_handle[5]: gt_ids,
                                   input_handle[6]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
-                    # print(ret)
+                    print(ret)
         else:
             traincfg = TrainConfig(
                 model=MODEL,

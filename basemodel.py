@@ -54,8 +54,10 @@ def backbone_scope(freeze):
                      kernel_initializer=tf.variance_scaling_initializer(
                          scale=2.0, mode='fan_out')), \
             ExitStack() as stack:
-        if cfg.BACKBONE.NORM in ['FreezeBN', 'SyncBN']:
+        if cfg.BACKBONE.NORM in ['FreezeBN', 'SyncBN']: # so that BatchNorm instead of GN is used
             if freeze or cfg.BACKBONE.NORM == 'FreezeBN':
+                # so the affine parameters are fixed?
+                # including the mean and covariance?
                 stack.enter_context(argscope(BatchNorm, training=False))
             else:
                 stack.enter_context(argscope(

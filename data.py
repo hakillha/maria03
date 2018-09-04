@@ -309,7 +309,7 @@ def get_train_dataflow():
     is_crowd: k booleans. Use k False if you don't know what it means.
     """
 
-    ds = DataFromList(imgs, shuffle=True)
+    ds = DataFromList(imgs, shuffle=cfg.DATA.TEST.SHUFFLE)
 
     # imgaug.Flip(horiz=True)
     aug = imgaug.AugmentorList(
