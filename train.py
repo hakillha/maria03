@@ -232,6 +232,9 @@ class ResNetC4Model(DetectionModel):
                     init = tf.variance_scaling_initializer()
                     hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
                     hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                    hidden = tf.layers.dense(hidden, 256, 
+                        kernel_initializer=init, activation=tf.nn.relu, name='feature_vector')
+                    # hidden = FullyConnected('fc8', hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
                     id_logits = FullyConnected(
                         'class', hidden, cfg.DATA.NUM_ID,
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
@@ -278,7 +281,7 @@ class ResNetC4Model(DetectionModel):
             # return unid_ind
 
             add_moving_summary(re_id_loss)
-            
+
             wd_cost = regularize_cost(
                 '.*/W', l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
 
@@ -308,8 +311,8 @@ class ResNetC4Model(DetectionModel):
             init = tf.variance_scaling_initializer()
             hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
             hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-
-
+            fv = tf.layers.dense(hidden, 256, 
+                        kernel_initializer=init, activation=tf.nn.relu, name='feature_vector')
 
 
 def offline_evaluate(pred_func, output_file):
@@ -537,8 +540,8 @@ if __name__ == '__main__':
                 input_handle = model.inputs()
                 ret_handle = model.build_graph(*input_handle)
 
-            # for op in tf.get_default_graph().get_operations():
-            #     print(op.name)
+            for op in tf.get_default_graph().get_operations():
+                print(op.name)
             # for var in tf.trainable_variables():
             #     print(var.name)
 
@@ -556,7 +559,7 @@ if __name__ == '__main__':
                                   input_handle[5]: gt_ids,
                                   input_handle[6]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
-                    print(ret)
+                    # print(ret)
         else:
             traincfg = TrainConfig(
                 model=MODEL,

@@ -62,7 +62,7 @@ _C.MODE_MASK = False        # FasterRCNN or MaskRCNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/'
+_C.DATA.BASEDIR = '../PRW-v16.04.20/'
 _C.DATA.TRAIN = ['train2014', 'valminusminival2014']   # i.e., trainval35k
 _C.DATA.VAL = 'minival2014'   # For now, only support evaluation on single dataset
 _C.DATA.NUM_CATEGORY = 1    # 80 categories. Plus bg or not?
