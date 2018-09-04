@@ -11,6 +11,7 @@ import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
 from tensorpack import *
+from tensorpack.models import FullyConnected
 from tensorpack.tfutils.summary import add_moving_summary
 import tensorpack.utils.viz as tpviz
 
@@ -216,16 +217,66 @@ class ResNetC4Model(DetectionModel):
             iou = pairwise_iou(boxes, gt_boxes)
             tp_mask = tf.reduce_max(iou, axis=1) >= cfg.RE_ID.IOU_THRESH
             iou = tf.boolean_mask(iou, tp_mask)
-            pred_gt_ind = tf.argmax(iou, axis=1)
-            # output following tensors
-            # pick out the -2 class here
-            pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
-            pred_boxes = tf.boolean_mask(boxes, tp_mask)
-            unid_ind = pred_gt_ids != 1
-            pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind)
-            pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
-            # id_roi
-            return pred_gt_ids, pred_boxes
+            # return iou to debug
+
+            def re_id_loss(pred_boxes, pred_gt_ids,
+                           featuremap):
+                boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
+                # name scope?
+                # stop gradient
+                roi_resized = roi_align(featuremap, boxes_on_featuremap, 14)
+                feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
+                feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
+
+                init = tf.variance_scaling_initializer()
+                hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                id_logits = FullyConnected(
+                    'class', hidden, cfg.DATA.NUM_ID,
+                    kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+
+                label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                                            labels=pred_gt_ids, logits=id_logits)
+                label_loss = tf.reduce_mean(label_loss, name='label_loss')
+
+                add_moving_summary(label_loss)
+
+                return label_loss
+
+            def check_unid_pedes(iou, gt_ids, boxes, tp_mask,
+                                 featuremap):
+                pred_gt_ind = tf.argmax(iou, axis=1)
+                # output following tensors
+                # pick out the -2 class here
+                pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
+                pred_boxes = tf.boolean_mask(boxes, tp_mask)
+                unid_ind = tf.not_equal(pred_gt_ids, 1)
+                pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind) 
+                pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
+
+                ret = tf.cond(tf.equal(tf.size(pred_gt_ids), 0), 
+                              lambda: tf.constant(0.0),
+                              lambda: re_id_loss(pred_boxes, pred_gt_ids,
+                                                 featuremap))
+                return ret
+
+            with tf.name_scope('re-id_head'):
+                # no detection has IOU > 0.7, re-id returns 0 loss
+                re_id_loss = tf.cond(tf.equal(tf.size(iou), 0), 
+                               lambda: tf.constant(0.0),
+                               lambda: check_unid_pedes(iou, gt_ids, boxes, tp_mask,
+                                                        featuremap))
+            # for debug, use tensor name to take out the handle
+            # return re_id_loss
+
+            # pred_gt_ind = tf.argmax(iou, axis=1)
+            # # output following tensors
+            # # pick out the -2 class here
+            # pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
+            # pred_boxes = tf.boolean_mask(boxes, tp_mask)
+            # unid_ind = pred_gt_ids != 1
+            
+            # return unid_ind
 
 
             wd_cost = regularize_cost(
@@ -235,6 +286,7 @@ class ResNetC4Model(DetectionModel):
             total_cost = tf.add_n([
                 rpn_label_loss, rpn_box_loss,
                 fastrcnn_label_loss, fastrcnn_box_loss,
+                re_id_loss,
                 wd_cost], 'total_cost')
 
             add_moving_summary(total_cost, wd_cost)
@@ -422,7 +474,7 @@ if __name__ == '__main__':
             #     # print(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()]))
 
 
-            #     # sess.run(tf.global_variables_initializer())
+            #     sess.run(tf.global_variables_initializer())
             #     session_init._setup_graph()
             #     session_init._run_init(sess)
 
@@ -470,20 +522,24 @@ if __name__ == '__main__':
                 input_handle = model.inputs()
                 ret_handle = model.build_graph(*input_handle)
 
-            with tf.Session() as sess:
-                # sess.run(tf.global_variables_initializer())
-                session_init._setup_graph()
-                session_init._run_init(sess)
-                for _ in range(3):
-                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
-                    input_dict = {input_handle[0]: image,
-                                  input_handle[1]: anchor_labels,
-                                  input_handle[2]: anchor_boxes,
-                                  input_handle[3]: gt_boxes,
-                                  input_handle[4]: gt_labels,
-                                  input_handle[5]: gt_ids,
-                                  input_handle[6]: orig_shape}
-                    ret = sess.run(ret_handle, input_dict)
+            for op in tf.get_default_graph().get_operations():
+                print(op.name)
+
+            # with tf.Session() as sess:
+            #     sess.run(tf.global_variables_initializer())
+            #     session_init._setup_graph()
+            #     session_init._run_init(sess)
+            #     for _ in range(3):
+            #         image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
+            #         input_dict = {input_handle[0]: image,
+            #                       input_handle[1]: anchor_labels,
+            #                       input_handle[2]: anchor_boxes,
+            #                       input_handle[3]: gt_boxes,
+            #                       input_handle[4]: gt_labels,
+            #                       input_handle[5]: gt_ids,
+            #                       input_handle[6]: orig_shape}
+            #         ret = sess.run(ret_handle, input_dict)
+            #         print(ret)
         else:
             traincfg = TrainConfig(
                 model=MODEL,
