@@ -62,7 +62,7 @@ _C.MODE_MASK = False        # FasterRCNN or MaskRCNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '../PRW-v16.04.20/'
+_C.DATA.BASEDIR = '/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20'
 _C.DATA.TRAIN = ['train2014', 'valminusminival2014']   # i.e., trainval35k
 _C.DATA.VAL = 'minival2014'   # For now, only support evaluation on single dataset
 _C.DATA.NUM_CATEGORY = 1    # 80 categories. Plus bg or not?
@@ -100,6 +100,8 @@ _C.TRAIN.STEPS_PER_EPOCH = 500
 # LR_SCHEDULE = [120000, 160000, 180000]  # "1x" schedule in detectron
 _C.TRAIN.LR_SCHEDULE = [240000, 320000, 360000]    # "2x" schedule in detectron
 _C.TRAIN.NUM_EVALS = 20  # number of evaluations to run during training
+
+_C.TRAIN.LOSS_NORMALIZATION = 1.0
 
 # preprocessing --------------------
 # Alternative old (worse & faster) setting: 600, 1024

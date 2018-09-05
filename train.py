@@ -156,7 +156,7 @@ class DetectionModel(ModelDesc):
             [str]: input names
             [str]: output names
         """
-        out = ['final_boxes', 'final_probs', 'final_labels']
+        out = ['final_boxes', 'final_probs', 'final_labels', 'feature_vector']
         return ['image'], out
 
 
@@ -266,9 +266,7 @@ class ResNetC4Model(DetectionModel):
                     init = tf.variance_scaling_initializer()
                     hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
                     hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                    hidden = tf.layers.dense(hidden, 256, 
-                        kernel_initializer=init, activation=tf.nn.relu, name='feature_vector')
-                    # hidden = FullyConnected('fc8', hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
+                    hidden = FullyConnected('fc8', hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
                     id_logits = FullyConnected(
                         'class', hidden, cfg.DATA.NUM_ID,
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
@@ -296,7 +294,7 @@ class ResNetC4Model(DetectionModel):
                                                  featuremap))
                 return ret
 
-            with tf.name_scope('re-id_head'):
+            with tf.name_scope('id_head'):
                 # no detection has IOU > 0.7, re-id returns 0 loss
                 re_id_loss = tf.cond(tf.equal(tf.size(iou), 0), 
                                lambda: tf.constant(0.0),
@@ -316,7 +314,7 @@ class ResNetC4Model(DetectionModel):
 
             # return tf.shape(boxes)[0]
 
-            re_id_loss = tf.divide(re_id_loss, 9.0, 're_id_loss')
+            re_id_loss = tf.divide(re_id_loss, cfg.TRAIN.LOSS_NORMALIZATION, 're_id_loss')
             add_moving_summary(re_id_loss)
 
             wd_cost = regularize_cost(
@@ -338,18 +336,23 @@ class ResNetC4Model(DetectionModel):
             final_boxes, final_labels, _ = self.fastrcnn_inference(
                 image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
 
-            preds_on_featuremap = final_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
-            # name scope?
-            # stop gradient
-            roi_resized = roi_align(featuremap, preds_on_featuremap, 14)
-            feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
-            feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
+            with tf.variable_scope('id_head'):
+                preds_on_featuremap = final_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
+                # name scope?
+                # stop gradient
+                roi_resized = roi_align(featuremap, preds_on_featuremap, 14)
+                feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
+                feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
 
-            init = tf.variance_scaling_initializer()
-            hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
-            hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-            fv = tf.layers.dense(hidden, 256, 
-                        kernel_initializer=init, activation=tf.nn.relu, name='feature_vector')
+                # init = tf.variance_scaling_initializer()
+                # hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                # hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                # fv = FullyConnected(hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
+                hidden = FullyConnected('fc6', feature_gap, 1024, activation=tf.nn.relu)
+                hidden = FullyConnected('fc7', hidden, 1024, activation=tf.nn.relu)
+                fv = FullyConnected('fc8', hidden, 256, activation=tf.nn.relu)
+
+            fv = tf.identity(fv, name='feature_vector')
 
 
 def offline_evaluate(pred_func, output_file):
@@ -577,10 +580,10 @@ if __name__ == '__main__':
                 input_handle = model.inputs()
                 ret_handle = model.build_graph(*input_handle)
 
-            for op in tf.get_default_graph().get_operations():
-                print(op.name)
-            # for var in tf.trainable_variables():
-            #     print(var.name)
+            # for op in tf.get_default_graph().get_operations():
+            #     print(op.name)
+            for var in tf.trainable_variables():
+                print(var.name)
 
             with tf.Session() as sess:
                 sess.run(tf.global_variables_initializer())
