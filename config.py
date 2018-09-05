@@ -62,7 +62,7 @@ _C.MODE_MASK = False        # FasterRCNN or MaskRCNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20'
+_C.DATA.BASEDIR = '../PRW-v16.04.20'
 _C.DATA.TRAIN = ['train2014', 'valminusminival2014']   # i.e., trainval35k
 _C.DATA.VAL = 'minival2014'   # For now, only support evaluation on single dataset
 _C.DATA.NUM_CATEGORY = 1    # 80 categories. Plus bg or not?
@@ -144,6 +144,7 @@ _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 
 # re-id branch
 _C.RE_ID.IOU_THRESH = 0.7
+_C.RE_ID.NMS = True
 
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5

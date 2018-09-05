@@ -235,8 +235,12 @@ class ResNetC4Model(DetectionModel):
 
 
             # acquire pred for re-id training
-            boxes, final_labels, final_probs = self.fastrcnn_inference_id(
-                image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
+            if cfg.RE_ID.NMS:
+                boxes, final_labels, final_probs = self.fastrcnn_inference(
+                    image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
+            else:
+                boxes, final_labels, final_probs = self.fastrcnn_inference_id(
+                    image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
             scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
                             tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
             final_boxes = boxes / scale
