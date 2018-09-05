@@ -144,11 +144,14 @@ class PRWDataset(object):
                 img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
                 img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
-                img['re_id_class'] = np.asarray(line_list[0], dtype='int32') + 1
+                img['re_id_class'] = []
+                img['re_id_class'].append(line_list[0])
+                img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32') + 1
 
                 # we can remove this since it's only checked in dataflow processing
                 # img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
-            imgs.append(img)
+                imgs.append(img)
+            
         return imgs
 
     def _use_absolute_file_name(self, img, file_name):
