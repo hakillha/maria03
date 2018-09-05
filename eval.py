@@ -104,12 +104,13 @@ def query_eval_output(df, pred_func, tqdm_bar=None):
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
         for img, gt_boxes, gt_ids in df.get_data():
             fvs = pred_func(img, gt_boxes)
+            # print(fvs.shape)
 
             result_list = []
             fv_list = []
             id_list = []
             for fv, gt_id in zip(fvs, gt_ids):
-                fv_list.append(list(fv))
+                fv_list.append(fv.tolist())
                 id_list.append(int(gt_id))
             result_list.append(fv_list)
                 
