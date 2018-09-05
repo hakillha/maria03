@@ -7,7 +7,8 @@ import scipy.io
 import tqdm
 
 from tensorpack.dataflow import (imgaug, MultiProcessMapDataZMQ,
-                                 DataFromList, MapDataComponent)
+                                 DataFromList, MapDataComponent,
+                                 MapData)
 from tensorpack.utils.argtools import memoized
 from tensorpack.utils.rect import FloatBox
 from tensorpack.utils.timer import timed_operation
@@ -118,9 +119,9 @@ class PRWDataset(object):
             print('Number of images without identified pedestrians: {}.'.format(imgs_without_fg))
             return imgs
 
-    def load_query():
+    def load_query(self):
         imgs = []
-        with open(pjoin(basedir, 'query_info.txt'), 'r') as f:
+        with open(pjoin(self._basedir, 'query_info.txt'), 'r') as f:
             for line in f:
                 img = {}
                 line_list = line.split()
@@ -139,7 +140,9 @@ class PRWDataset(object):
                 h = float(line_list[4])
                 box = FloatBox(x1, y1, x1 + w, y1 + h)
                 box.clip_by_shape([img['height'], img['width']])
+                img['boxes'] = []
                 img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
                 img['re_id_class'] = np.asarray(line_list[0], dtype='int32') + 1
 
@@ -443,5 +446,5 @@ def get_query_dataflow():
 
         return ret
 
-    ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
+    ds = MapData(ds, preprocess)
     return ds 

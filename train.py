@@ -20,9 +20,9 @@ from basemodel import (image_preprocess, resnet_c4_backbone,
 from config import finalize_configs, config as cfg
 # from data import PRWDataset
 from data import (get_train_dataflow, get_all_anchors,
-                  get_eval_dataflow)
+                  get_eval_dataflow, get_query_dataflow)
 from eval import (detect_one_image, eval_output,
-                  DetectionResult)
+                  DetectionResult, query_eval_output)
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
