@@ -510,7 +510,7 @@ if __name__ == '__main__':
                 output_names=MODEL.get_query_inference_tensor_names()[1]))
         assert args.query.endswith('.json'), args.query
         
-        query_evaluate(pred, args.evaluate)
+        query_evaluate(pred, args.query)
     else:
         logger.set_logger_dir(args.logdir, 'b')
 

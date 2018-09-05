@@ -101,8 +101,6 @@ _C.TRAIN.STEPS_PER_EPOCH = 500
 _C.TRAIN.LR_SCHEDULE = [240000, 320000, 360000]    # "2x" schedule in detectron
 _C.TRAIN.NUM_EVALS = 20  # number of evaluations to run during training
 
-_C.TRAIN.LOSS_NORMALIZATION = 1.0
-
 # preprocessing --------------------
 # Alternative old (worse & faster) setting: 600, 1024
 # _C.PREPROC.SHORT_EDGE_SIZE = 800
@@ -146,6 +144,7 @@ _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 _C.RE_ID.IOU_THRESH = 0.7
 _C.RE_ID.NMS = True
 _C.RE_ID.QUERY_EVAL = False
+_C.RE_ID.LOSS_NORMALIZATION = 1.0
 
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5
