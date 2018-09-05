@@ -118,6 +118,36 @@ class PRWDataset(object):
             print('Number of images without identified pedestrians: {}.'.format(imgs_without_fg))
             return imgs
 
+    def load_query():
+        imgs = []
+        with open(pjoin(basedir, 'query_info.txt'), 'r') as f:
+            for line in f:
+                img = {}
+                line_list = line.split()
+                self._use_absolute_file_name(img, line_list[5])
+
+                if line_list[5][1] == '6':
+                    img['height'] = 576
+                    img['width'] = 720
+                else:
+                    img['height'] = 1080
+                    img['width'] = 1920
+
+                x1 = float(line_list[1])
+                y1 = float(line_list[2])
+                w = float(line_list[3])
+                h = float(line_list[4])
+                box = FloatBox(x1, y1, x1 + w, y1 + h)
+                box.clip_by_shape([img['height'], img['width']])
+                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+
+                img['re_id_class'] = np.asarray(line_list[0], dtype='int32') + 1
+
+                # we can remove this since it's only checked in dataflow processing
+                # img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
+            imgs.append(img)
+        return imgs
+
     def _use_absolute_file_name(self, img, file_name):
         """
         Change relative filename to abosolute file name.
@@ -377,3 +407,41 @@ def get_eval_dataflow(shard=0, num_shards=1):
     ds = MapDataComponent(ds, f, 0)
     # Evaluation itself may be multi-threaded, therefore don't add prefetch here.
     return ds
+
+def get_query_dataflow():
+    """
+    Args:
+        shard, num_shards: to get subset of evaluation data
+    """
+    prw = PRWDataset(cfg.DATA.BASEDIR)
+    imgs = prw.load_query()
+
+    # no filter for training
+    # test if it can repeat keys
+    ds = DataFromList(imgs, shuffle=False)
+
+    aug = imgaug.AugmentorList(
+        [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
+
+    def preprocess(img):
+        fname, boxes, re_id_class = img['file_name'], img['boxes'], img['re_id_class']
+        boxes = np.copy(boxes)
+        im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        assert im is not None, fname
+        im = im.astype('float32')
+        # assume floatbox as input
+        assert boxes.dtype == np.float32, "Loader has to return floating point boxes!"
+
+        # augmentation:
+        im, params = aug.augment_return_params(im)
+        points = box_to_point8(boxes)
+        points = aug.augment_coords(points, params)
+        boxes = point8_to_box(points)
+        assert np.min(np_area(boxes)) > 0, "Some boxes have zero area!"
+
+        ret = [im, boxes, re_id_class]
+
+        return ret
+
+    ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
+    return ds 

@@ -29,6 +29,7 @@ from model_box import (RPNAnchors, roi_align,
 from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
                          fastrcnn_losses, fastrcnn_predictions,
                          fastrcnn_predictions_id)
+from model_id import query_eval
 from model_rpn import (rpn_head, generate_rpn_proposals,
                         rpn_losses,)
 from viz import draw_final_outputs
@@ -158,6 +159,16 @@ class DetectionModel(ModelDesc):
         """
         out = ['final_boxes', 'final_probs', 'final_labels', 'feature_vector']
         return ['image'], out
+
+    def get_query_inference_tensor_names(self):
+        """
+        Returns two lists of tensor names to be used to create an inference callable.
+
+        Returns:
+            [str]: input names
+            [str]: output names
+        """
+        return ['image', 'gt_boxes'], ['feature_vector']
 
 
 class ResNetC4Model(DetectionModel):
@@ -337,8 +348,12 @@ class ResNetC4Model(DetectionModel):
             # return total_cost, boxes, final_probs, final_labels
             # return total_cost, final_boxes, final_probs, final_labels
         else:
-            final_boxes, final_labels, _ = self.fastrcnn_inference(
-                image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
+            if cfg.RE_ID.QUERY_EVAL:
+                # resize the gt_boxes in dataflow
+                final_boxes = gt_boxes
+            else:
+                final_boxes, final_labels, _ = self.fastrcnn_inference(
+                    image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
 
             with tf.variable_scope('id_head'):
                 preds_on_featuremap = final_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
@@ -366,6 +381,12 @@ def offline_evaluate(pred_func, output_file):
     with open(output_file, 'w') as f:
         json.dump(all_results, f)
     # print_evaluation_scores(output_file)
+
+def query_evaluate(pred_func, output_file):
+    df = get_query_dataflow()
+    all_results = query_eval_output(df, pred_func)
+    with open(output_file, 'w') as f:
+        json.dump(all_results, f)
 
 def predict(pred_func, input_file):
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
@@ -440,8 +461,9 @@ if __name__ == '__main__':
     parser.add_argument('--modeldir', help='load a model for evaluation or training. Can overwrite BACKBONE.WEIGHTS')
     parser.add_argument('--logdir', default='train_log/fasterrcnn')
     parser.add_argument('--evaluate', help='Run evaluation on PRW. '
-                                           'This argument is the path to the output json results file')
+                                           'This argument is the path to the output json results file.')
     parser.add_argument('--predict', help='Single image inference. This argument points to a image file or folder.')
+    parser.add_argument('--query', help='Path to the output json file.')
     # parser.add_argument('--re-id_training', action='store_true', default=True)
     parser.add_argument('--random_predict', action='store_true')
     parser.add_argument('--config', nargs='+')
@@ -477,6 +499,18 @@ if __name__ == '__main__':
                 predict(pred, predict_file)
             else:
                 predict(pred, args.predict)
+    elif args.query:
+        assert args.modeldir
+        finalize_configs(is_training=False)
+
+        pred = OfflinePredictor(PredictConfig(
+                model=MODEL,
+                session_init=get_model_loader(args.modeldir),
+                input_names=MODEL.get_query_inference_tensor_names()[0],
+                output_names=MODEL.get_query_inference_tensor_names()[1]))
+        assert args.query.endswith('.json'), args.query
+        
+        query_evaluate(pred, args.evaluate)
     else:
         logger.set_logger_dir(args.logdir, 'b')
 

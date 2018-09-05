@@ -145,6 +145,7 @@ _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 # re-id branch
 _C.RE_ID.IOU_THRESH = 0.7
 _C.RE_ID.NMS = True
+_C.RE_ID.QUERY_EVAL = False
 
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5
