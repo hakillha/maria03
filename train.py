@@ -235,7 +235,7 @@ class ResNetC4Model(DetectionModel):
 
 
             # acquire pred for re-id training
-            boxes, final_labels, final_probs = self.fastrcnn_inference(
+            boxes, final_labels, final_probs = self.fastrcnn_inference_id(
                 image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
             scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
                             tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
@@ -314,9 +314,9 @@ class ResNetC4Model(DetectionModel):
             
             # return unid_ind
 
-            return tf.shape(iou)[0]
+            # return tf.shape(boxes)[0]
 
-            tf.divide(re_id_loss, 9.0, 're_id_loss')
+            re_id_loss = tf.divide(re_id_loss, 9.0, 're_id_loss')
             add_moving_summary(re_id_loss)
 
             wd_cost = regularize_cost(
