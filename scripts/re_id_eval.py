@@ -16,4 +16,6 @@ if __name__ == '__main__':
 	with open(args.query_file, 'r') as query_file:
 		query_list = json.load(query_file)
 
+		for query in query_list:
+			print(len())
 		
