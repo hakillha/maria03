@@ -374,29 +374,6 @@ class ResNetC4Model(DetectionModel):
             fv = tf.identity(fv, name='feature_vector')
 
 
-def offline_evaluate(pred_func, output_file):
-    df = get_eval_dataflow()
-    all_results = eval_output(
-        df, lambda img: detect_one_image(img, pred_func))
-    with open(output_file, 'w') as f:
-        json.dump(all_results, f)
-    # print_evaluation_scores(output_file)
-
-def query_evaluate(pred_func, output_file):
-    df = get_query_dataflow()
-    all_results = query_eval_output(df, pred_func)
-    with open(output_file, 'w') as f:
-        json.dump(all_results, f)
-
-def predict(pred_func, input_file):
-    img = cv2.imread(input_file, cv2.IMREAD_COLOR)
-    results = detect_one_image(img, pred_func)
-    final = draw_final_outputs(img, results)
-    viz = np.concatenate((img, final), axis=1)
-    # tpviz.interactive_imshow(viz)
-    cv2.imwrite(os.path.basename(input_file), viz)
-
-
 class EvalCallback(Callback):
     """
     A callback that runs COCO evaluation once a while.
@@ -455,6 +432,28 @@ class EvalCallback(Callback):
         if self.epoch_num in self.epochs_to_eval:
             self._eval()
 
+
+def offline_evaluate(pred_func, output_file):
+    df = get_eval_dataflow()
+    all_results = eval_output(
+        df, lambda img: detect_one_image(img, pred_func))
+    with open(output_file, 'w') as f:
+        json.dump(all_results, f)
+    # print_evaluation_scores(output_file)
+
+def query_evaluate(pred_func, output_file):
+    df = get_query_dataflow()
+    all_results = query_eval_output(df, pred_func)
+    with open(output_file, 'w') as f:
+        json.dump(all_results, f)
+
+def predict(pred_func, input_file):
+    img = cv2.imread(input_file, cv2.IMREAD_COLOR)
+    results = detect_one_image(img, pred_func)
+    final = draw_final_outputs(img, results)
+    viz = np.concatenate((img, final), axis=1)
+    # tpviz.interactive_imshow(viz)
+    cv2.imwrite(os.path.basename(input_file), viz)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -536,7 +535,7 @@ if __name__ == '__main__':
 
         callbacks = [
             PeriodicCallback(
-                ModelSaver(max_to_keep=5, keep_checkpoint_every_n_hours=2),
+                ModelSaver(max_to_keep=2, keep_checkpoint_every_n_hours=6),
                 every_k_epochs=20),
             # linear warmup
             ScheduledHyperParamSetter(
