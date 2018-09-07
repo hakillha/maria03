@@ -83,6 +83,7 @@ def eval_output(df, detect_func, tqdm_bar=None):
             result_list.append(score_list)
             result_list.append(fv_list)
                 
+            # dump a dummy json here to check for validity
             all_results.append(result_list)
             tqdm_bar.update(1)
     return all_results
