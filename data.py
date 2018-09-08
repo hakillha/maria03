@@ -71,7 +71,7 @@ class PRWDataset(object):
                     elif 'anno_file' in anno_data:
                         gt_bb_array = anno_data['anno_file']
                     elif 'anno_previous' in anno_data:
-                        gt_bb = anno_data['anno_previous']
+                        gt_bb_array = anno_data['anno_previous']
                     else:
                         raise Exception(frame[0][0] + ' bounding boxes info missing!')
 

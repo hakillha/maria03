@@ -44,10 +44,12 @@ if __name__ == '__main__':
         with open(pjoin(output_dir, frame[0][0] + '.txt'), 'w') as f:
             for bb in gt_bb:
                 if include_all:
-                    f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4]]) + '\n')
-                else:
-                    if bb[0] == -2:
-                        f.write(' '.join(['BG', bb[1], bb[2], bb[3], bb[4]]) + '\n')
-                    else:
-                        f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4]]) + '\n')
+                    f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4], bb[0]]) + '\n')
+                    # f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4], str(int(bb[0]))]) + '\n')
+                # add id - bb[0]
+                # else:
+                #     if bb[0] == -2:
+                #         f.write(' '.join(['BG', bb[1], bb[2], bb[3], bb[4]]) + '\n')
+                #     else:
+                #         f.write(' '.join(['pedestrian', bb[1], bb[2], bb[3], bb[4]]) + '\n')
 
