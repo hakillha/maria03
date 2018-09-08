@@ -115,10 +115,10 @@ def query_eval_output(df, pred_func, tqdm_bar=None):
             fv_list = []
             id_list = []
             for fv, gt_id in zip(fvs, gt_ids):
-                fv_list.append(fv[0].tolist())
+                fv_list.append(fv.tolist())
                 id_list.append(int(gt_id))
-            result_list.append(fv_list)
             result_list.append(id_list)
+            result_list.append(fv_list)
                 
             all_results.append(result_list)
             tqdm_bar.update(1)

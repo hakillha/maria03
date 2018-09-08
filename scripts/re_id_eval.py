@@ -68,16 +68,18 @@ if __name__ == '__main__':
             """
             # print(len(query[0][0][0]))
             fv = np.array(query[0][0][0])
+            print(fv)
             # fv = query[0][0][0]
             distance = []
             print(query_id)
             for gfv in gallery_bb:
                 distance.append(np.linalg.norm(fv - gfv[:256]))
-                distance = np.array(distance)
-                index_sort = np.argsort(distance)
-                cls_top20 = gallery_bb[index_sort[:20], 260]
-                if query[1][0] in cls_top20.tolist():
-                    tp_top20 += 1
-        print('Top 20 accuracy: ' + str(tp_top20/len(query_list)))
+            distance_array = np.array(distance)
+            index_sort = np.argsort(distance_array)
+            cls_top20 = gallery_bb[index_sort[:20], 260]
+            if query[1][0] in cls_top20.tolist():
+                tp_top20 += 1
+    
+    print('Top 20 accuracy: ' + str(tp_top20/len(query_list)))
 
         
