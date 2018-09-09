@@ -470,13 +470,14 @@ def get_train_aseval_dataflow():
     def preprocess(img):
         fname = img['file_name']
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        orig_shape = im.shape[:2]
         assert im is not None, fname
         im = im.astype('float32')
 
         # augmentation:
         im, params = aug.augment_return_params(im)
 
-        ret = [fname, im]
+        ret = [fname, im, orig_shape]
 
         return ret
 

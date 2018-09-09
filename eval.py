@@ -9,6 +9,14 @@ from tensorpack.utils.utils import get_tqdm_kwargs
 from common import CustomResize, clip_boxes
 from config import config as cfg
 
+VIZ = False
+
+if VIZ:
+    import cv2
+    import os
+    import tensorpack.utils.viz as tpviz
+    from viz import draw_final_outputs
+
 
 DetectionResult = namedtuple(
     'DetectionResult',
@@ -150,8 +158,15 @@ def classifier_eval_output(df, pred_func, tqdm_bar=None):
         if tqdm_bar is None:
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
-        for fname, img in df.get_data():
-            bbs, probs = pred_func(img)
+        for fname, img, orig_shape in df.get_data():
+            bbs, probs = pred_func(img, orig_shape)
+
+            if VIZ:
+                input_file = os.path.join('/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/frames', os.path.basename(fname).split('.')[0] + '.jpg')
+                img = cv2.imread(input_file, cv2.IMREAD_COLOR)
+                final = draw_final_outputs(img, bbs, tags_on=False, bb_list_input=True)
+                viz = np.concatenate((img, final), axis=1)
+                cv2.imwrite(os.path.basename(input_file), viz)
 
             result_list = []
             result_list.append(fname)

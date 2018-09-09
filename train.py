@@ -180,8 +180,9 @@ class DetectionModel(ModelDesc):
             [str]: input names
             [str]: output names
         """
-        out = ['final_boxes', 're_id_probs']
-        return ['image'], out
+        # out = ['final_boxes', 're_id_probs']
+        out = ['rescaled_final_boxes', 're_id_probs']
+        return ['image', 'orig_shape'], out
 
 
 class ResNetC4Model(DetectionModel):
@@ -382,6 +383,13 @@ class ResNetC4Model(DetectionModel):
                 id_logits = FullyConnected(
                         'class', fv, cfg.DATA.NUM_ID,
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+
+            scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
+                            tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
+            rescaled_final_boxes = final_boxes / scale
+            # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
+            rescaled_final_boxes = tf_clip_boxes(rescaled_final_boxes, orig_shape)
+            rescaled_final_boxes = tf.identity(rescaled_final_boxes, 'rescaled_final_boxes')
 
             fv = tf.identity(fv, name='feature_vector')
             prob = tf.nn.softmax(id_logits, name='re_id_probs')
