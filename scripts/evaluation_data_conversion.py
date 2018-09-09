@@ -8,18 +8,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', default='/home/yingges/Desktop/Research/thesis01/PRW-v16.04.20')
     parser.add_argument('--output_dir_postfix', default='')
+    parser.add_argument('--set', default='test')
     args = parser.parse_args()
 
-    test_frame_list_mat = scipy.io.loadmat(pjoin(args.data_dir, 'frame_test.mat'))
-    test_frame_list = test_frame_list_mat['img_index_test']
-    # print(test_frame_list_mat)
+    frame_list_mat = scipy.io.loadmat(pjoin(args.data_dir, 'frame_' + args.set + '.mat'))
+    frame_list = frame_list_mat['img_index_' + args.set]
 
     try:
-        output_dir = pjoin(args.data_dir, 'converted_annotations' + args.output_dir_postfix)
+        output_dir = pjoin(args.data_dir, args.set + '_converted_annotations' + args.output_dir_postfix)
         os.mkdir(output_dir)
     except OSError:
         print('Output folder already exists.')
-    for idx, frame in enumerate(test_frame_list):
+    for idx, frame in enumerate(frame_list):
         anno_data = scipy.io.loadmat(pjoin(args.data_dir, 'annotations', frame[0][0] + '.jpg.mat'))
 
         # print(anno_data)

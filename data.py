@@ -450,4 +450,35 @@ def get_query_dataflow():
         return ret
 
     ds = MapData(ds, preprocess)
+    return ds
+
+def get_train_aseval_dataflow():
+    """
+    Args:
+        shard, num_shards: to get subset of evaluation data
+    """
+    prw = PRWDataset(cfg.DATA.BASEDIR)
+    imgs = prw.load()
+
+    # no filter for training
+    # test if it can repeat keys
+    ds = DataFromList(imgs, shuffle=False)
+
+    aug = imgaug.AugmentorList(
+        [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
+
+    def preprocess(img):
+        fname = img['file_name']
+        im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        assert im is not None, fname
+        im = im.astype('float32')
+
+        # augmentation:
+        im, params = aug.augment_return_params(im)
+
+        ret = [fname, im]
+
+        return ret
+
+    ds = MapData(ds, preprocess)
     return ds 

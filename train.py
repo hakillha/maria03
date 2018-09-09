@@ -20,9 +20,11 @@ from basemodel import (image_preprocess, resnet_c4_backbone,
 from config import finalize_configs, config as cfg
 # from data import PRWDataset
 from data import (get_train_dataflow, get_all_anchors,
-                  get_eval_dataflow, get_query_dataflow)
+                  get_eval_dataflow, get_query_dataflow,
+                  get_train_aseval_dataflow)
 from eval import (detect_one_image, eval_output,
-                  DetectionResult, query_eval_output)
+                  DetectionResult, query_eval_output,
+                  classifier_eval_output)
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
@@ -169,6 +171,17 @@ class DetectionModel(ModelDesc):
             [str]: output names
         """
         return ['image', 'gt_boxes'], ['feature_vector']
+
+    def get_classifier_tensor_names(self):
+        """
+        Returns two lists of tensor names to be used to create an inference callable.
+
+        Returns:
+            [str]: input names
+            [str]: output names
+        """
+        out = ['final_boxes', 're_id_probs']
+        return ['image'], out
 
 
 class ResNetC4Model(DetectionModel):
@@ -363,15 +376,15 @@ class ResNetC4Model(DetectionModel):
                 feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
                 feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
 
-                # init = tf.variance_scaling_initializer()
-                # hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                # hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                # fv = FullyConnected(hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
                 hidden = FullyConnected('fc6', feature_gap, 1024, activation=tf.nn.relu)
                 hidden = FullyConnected('fc7', hidden, 1024, activation=tf.nn.relu)
                 fv = FullyConnected('fc8', hidden, 256, activation=tf.nn.relu)
+                id_logits = FullyConnected(
+                        'class', fv, cfg.DATA.NUM_ID,
+                        kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
             fv = tf.identity(fv, name='feature_vector')
+            prob = tf.nn.softmax(id_logits, name='re_id_probs')
 
 
 class EvalCallback(Callback):
@@ -447,6 +460,12 @@ def query_evaluate(pred_func, output_file):
     with open(output_file, 'w') as f:
         json.dump(all_results, f)
 
+def classifier_evaluate(pred_func, output_file):
+    df = get_train_aseval_dataflow()
+    all_results = classifier_eval_output(df, pred_func)
+    with open(output_file, 'w') as f:
+        json.dump(all_results, f)
+
 def predict(pred_func, input_file):
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
     results = detect_one_image(img, pred_func)
@@ -461,6 +480,7 @@ if __name__ == '__main__':
     parser.add_argument('--logdir', default='train_log/fasterrcnn')
     parser.add_argument('--evaluate', help='Run evaluation on PRW. '
                                            'This argument is the path to the output json results file.')
+    parser.add_argument('--evaluate_classifier')
     parser.add_argument('--predict', help='Single image inference. This argument points to a image file or folder.')
     parser.add_argument('--query', help='Path to the output json file.')
     # parser.add_argument('--re-id_training', action='store_true', default=True)
@@ -498,17 +518,26 @@ if __name__ == '__main__':
                 predict(pred, predict_file)
             else:
                 predict(pred, args.predict)
-    elif args.query:
+    elif args.evaluate_classifier:
         assert args.modeldir
         finalize_configs(is_training=False)
-
+        pred = OfflinePredictor(PredictConfig(
+                model=MODEL,
+                session_init=get_model_loader(args.modeldir),
+                input_names=MODEL.get_classifier_tensor_names()[0],
+                output_names=MODEL.get_classifier_tensor_names()[1]))
+        assert args.evaluate_classifier.endswith('.json'), args.evaluate_classifier
+        classifier_evaluate(pred, args.evaluate_classifier)
+    elif args.query:
+        assert args.modeldir
+        cfg.RE_ID.QUERY_EVAL = True
+        finalize_configs(is_training=False)
         pred = OfflinePredictor(PredictConfig(
                 model=MODEL,
                 session_init=get_model_loader(args.modeldir),
                 input_names=MODEL.get_query_inference_tensor_names()[0],
                 output_names=MODEL.get_query_inference_tensor_names()[1]))
         assert args.query.endswith('.json'), args.query
-        
         query_evaluate(pred, args.query)
     else:
         logger.set_logger_dir(args.logdir, 'b')

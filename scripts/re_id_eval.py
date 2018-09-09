@@ -4,6 +4,9 @@ import numpy as np
 import os
 import scipy
 import sys
+import tqdm
+
+from tensorpack.utils.utils import get_tqdm_kwargs
 
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 
@@ -53,32 +56,38 @@ if __name__ == '__main__':
             """
             gt_bb_array, gt_cls_array = read_annotations(
                 os.path.join(args.anno_dir, os.path.basename(frame[0]).split('.')[0] + '.txt'))
+            if not frame[1]:
+                # print('No detection')
+                continue
             det_cls_array = bb_cls_matching(np.array(frame[1]), gt_bb_array, gt_cls_array)
             for bb, fv, det_cls in zip(frame[1], frame[4], det_cls_array):
                 gallery_bb.append(fv + bb + [det_cls]) 
     gallery_bb = np.array(gallery_bb)
+    print(gallery_bb.shape)
             
     with open(args.query_file, 'r') as query_file:
         query_list = json.load(query_file)
         tp_top20 = 0.0
-        for query_id, query in enumerate(query_list):
-            """
-                query[0]: feature vector list
-                query[1]: query id list
-            """
-            # print(len(query[0][0][0]))
-            fv = np.array(query[0][0][0])
-            print(fv)
-            # fv = query[0][0][0]
-            distance = []
-            print(query_id)
-            for gfv in gallery_bb:
-                distance.append(np.linalg.norm(fv - gfv[:256]))
-            distance_array = np.array(distance)
-            index_sort = np.argsort(distance_array)
-            cls_top20 = gallery_bb[index_sort[:20], 260]
-            if query[1][0] in cls_top20.tolist():
-                tp_top20 += 1
+        with tqdm.tqdm(total=len(query_list), **get_tqdm_kwargs()) as tqdm_bar:
+            for query_id, query in enumerate(query_list):
+                """
+                    query[0]: feature vector list
+                    query[1]: query id list
+                """
+                # print(len(query[0][0][0]))
+                fv = np.array(query[1][0][0])
+                # fv = query[0][0][0]
+                distance = []
+                for gfv in gallery_bb:
+                    distance.append(np.linalg.norm(fv - gfv[:256]))
+                distance_array = np.array(distance)
+                index_sort = np.argsort(distance_array)
+                cls_top20 = gallery_bb[index_sort[:20], 260]
+                if query[0][0] in cls_top20.astype(int).tolist():
+                    # print(query[0][0], cls_top20.astype(int).tolist())
+                    print('yay')
+                    tp_top20 += 1
+                tqdm_bar.update(1)
     
     print('Top 20 accuracy: ' + str(tp_top20/len(query_list)))
 
