@@ -36,13 +36,7 @@ def bb_cls_matching(det_bb, gt_bb, gt_cls):
     
     return det_cls
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--query_file')
-    parser.add_argument('--gallery_file')
-    parser.add_argument('--anno_dir', default='/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/converted_annotations02')
-    args = parser.parse_args()
-
+def re_id_eval(args):
     with open(args.gallery_file, 'r') as gallery_file:
         gallery_list = json.load(gallery_file)
         gallery_bb = []
@@ -90,5 +84,21 @@ if __name__ == '__main__':
                 tqdm_bar.update(1)
     
     print('Top 20 accuracy: ' + str(tp_top20/len(query_list)))
+
+def classifier_eval(agrs):
+	pass
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--query_file')
+    parser.add_argument('--gallery_file')
+    parser.add_argument('--classification_file')
+    parser.add_argument('--anno_dir', default='/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/converted_annotations02')
+    args = parser.parse_args()
+
+    if args.query_file and args.gallery_file:
+	    re_id_eval(args)
+	elif args.classification_file:
+		classifier_eval(args)
 
         
