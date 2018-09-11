@@ -173,7 +173,6 @@ def classifier_eval_output(df, pred_func, tqdm_bar=None):
             bb_list = []
             prob_list = []
             for bb, prob in zip(bbs, probs):
-                print(bb)
                 bb_list.append(list(map(lambda x: round(float(x), 2), bb)))
                 prob_list.append(list(map(lambda x:round(float(x), 4), prob)))
             result_list.append(bb_list)
