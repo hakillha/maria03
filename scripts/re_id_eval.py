@@ -118,6 +118,8 @@ def classifier_eval(agrs):
 
         gt_bb_array, gt_cls_array = read_annotations(
             os.path.join(args.anno_dir, os.path.basename(result[0]).split('.')[0] + '.txt'))
+        print(np.array(result[1]))
+        print(gt_bb_array)
         if not len(result[1]):
             continue
         det_gt_cls_array, pos_ind = bb_cls_matching(np.array(result[1]), gt_bb_array, gt_cls_array, iou_thresh=0.7)
