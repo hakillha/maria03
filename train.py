@@ -286,7 +286,7 @@ class ResNetC4Model(DetectionModel):
             def re_id_loss(pred_boxes, pred_gt_ids,
                            featuremap):
                 with tf.variable_scope('id_head'):
-                    num_of_samples_used = tf.get_variable('num_of_samples_used', dtype=tf.uint32, initializer=0, trainable=False)
+                    num_of_samples_used = tf.get_variable('num_of_samples_used', initializer=0, trainable=False)
                     num_of_samples_used.assign_add(tf.size(pred_boxes))
 
                     boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
