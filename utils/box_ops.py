@@ -69,4 +69,4 @@ def tf_clip_boxes(boxes, shape):
   y2 = tf.clip_by_value(y2, tf.constant(0.0), tf.to_float(shape[0]))
   x1 = tf.slice(x1y1, [0, 0], [-1, 1])
   y1 = tf.slice(x1y1, [0, 1], [-1, 1])
-  return tf.squeeze(tf.stack([x1, y1, x2, y2], axis=1))
+  return tf.stack([x1, y1, x2, y2])

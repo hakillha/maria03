@@ -159,7 +159,8 @@ def classifier_eval_output(df, pred_func, tqdm_bar=None):
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
         for fname, img, orig_shape in df.get_data():
-            bbs, probs = pred_func(img, orig_shape)
+            bbs, probs, orig_shape_out = pred_func(img, orig_shape)
+            print(orig_shape_out)
 
             if VIZ:
                 input_file = os.path.join('/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/frames', os.path.basename(fname).split('.')[0] + '.jpg')
@@ -173,6 +174,7 @@ def classifier_eval_output(df, pred_func, tqdm_bar=None):
             bb_list = []
             prob_list = []
             for bb, prob in zip(bbs, probs):
+                print(bb)
                 bb_list.append(list(map(lambda x: round(float(x), 2), bb)))
                 prob_list.append(list(map(lambda x:round(float(x), 4), prob)))
             result_list.append(bb_list)
