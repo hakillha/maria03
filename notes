@@ -41,3 +41,14 @@ python3 train.py --modeldir=ckpt/frcnn_prw_08_31_01/model-180000 --evaluate=trai
 python3 train.py --config BACKBONE.WEIGHTS=ckpt/frcnn_prw_inf_01/model-380000 DATA.BASEDIR=/media/yingges/TOSHIBA\ EXT/datasets/re-ID/PRW-v16.04.20 --debug_mode
 
 python train.py --modeldir=train_log/frcnn_prw_id_09_05_01/model-10000 --query=train_log/query_01.json
+
+python train.py --config \
+DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ \
+BACKBONE.WEIGHTS=train_log/frcnn_prw_id_09_05_06_backup/model-420000 \
+RE_ID.LOSS_NORMALIZATION=4.5 \
+--logdir=train_log/test01
+
+python train.py --config \
+DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ \
+BACKBONE.WEIGHTS=train_log/frcnn_prw_id_09_05_06_backup/model-420000 \
+--logdir=train_log/test04

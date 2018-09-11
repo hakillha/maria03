@@ -287,7 +287,7 @@ class ResNetC4Model(DetectionModel):
                            featuremap):
                 with tf.variable_scope('id_head'):
                     num_of_samples_used = tf.get_variable('num_of_samples_used', initializer=0, trainable=False)
-                    num_of_samples_used.assign_add(tf.size(pred_boxes))
+                    num_of_samples_used.assign_add(tf.shape(pred_boxes)[0])
 
                     boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
                     # name scope?
@@ -317,6 +317,7 @@ class ResNetC4Model(DetectionModel):
                 # pick out the -2 class here
                 pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
                 pred_boxes = tf.boolean_mask(boxes, tp_mask)
+                # label 1 corresponds to unid pedes
                 unid_ind = tf.not_equal(pred_gt_ids, 1)
                 pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind) 
                 pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
@@ -333,7 +334,7 @@ class ResNetC4Model(DetectionModel):
                     lambda: (tf.constant(0.0), tf.constant(0)),
                     lambda: check_unid_pedes(iou, gt_ids, 
                         boxes, tp_mask, featuremap))
-                add_tensor_summary(num_of_samples_used, ['scalar'], name='id_head/num_of_samples_used')
+                add_tensor_summary(num_of_samples_used, ['scalar'], name='num_of_samples_used')
             # for debug, use tensor name to take out the handle
             # return re_id_loss
 
@@ -362,7 +363,8 @@ class ResNetC4Model(DetectionModel):
                 wd_cost], 'total_cost')
 
             add_moving_summary(total_cost, wd_cost)
-            return total_cost
+            # return total_cost
+            return total_cost, num_of_samples_used
             # return re_id_loss
             # return total_cost, boxes, final_probs, final_labels
             # return total_cost, final_boxes, final_probs, final_labels
@@ -681,7 +683,7 @@ if __name__ == '__main__':
                 sess.run(tf.global_variables_initializer())
                 session_init._setup_graph()
                 session_init._run_init(sess)
-                for _ in range(100):
+                for _ in range(10):
                     image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
                     input_dict = {input_handle[0]: image,
                                   input_handle[1]: anchor_labels,
@@ -691,5 +693,5 @@ if __name__ == '__main__':
                                   input_handle[5]: gt_ids,
                                   input_handle[6]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
-                    print(ret)
+                    print(ret[1])
 
