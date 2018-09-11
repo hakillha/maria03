@@ -30,8 +30,9 @@ def read_annotations(fname):
     return gt_bb, gt_cls
 
 def bb_cls_matching(det_bb, gt_bb, gt_cls, iou_thresh=0.5):
+    det_cls = np.zeros(len(det_bb))
+
     iou_array = iou(det_bb, gt_bb)
-    det_cls = np.zeros(len(iou_array))
     pos_ind = np.where(np.amax(iou_array, axis=1) >= iou_thresh)
     if not len(pos_ind[0]):
         print('Warning: No matching bb!')
@@ -39,12 +40,11 @@ def bb_cls_matching(det_bb, gt_bb, gt_cls, iou_thresh=0.5):
     pos_det_cls = gt_cls[np.argmax(iou_array, axis=1)]
     det_cls[pos_ind] = pos_det_cls
     
-    return det_cls, pos_ind
+    return det_cls, pos_ind[0]
 
 def viz_detection(args, fname, bb_list):
     input_file = os.path.join(args.anno_dir, '..', 'frames', os.path.basename(fname).split('.')[0] + '.jpg')
     img = cv2.imread(input_file, cv2.IMREAD_COLOR)
-    # print(result[1])
     final = draw_final_outputs(img, bb_list, tags_on=False, bb_list_input=True)
     viz = np.concatenate((img, final), axis=1)
     cv2.imwrite(os.path.basename(input_file), viz)
@@ -84,9 +84,7 @@ def re_id_eval(args):
                     query[0]: feature vector list
                     query[1]: query id list
                 """
-                # print(len(query[0][0][0]))
                 fv = np.array(query[1][0][0])
-                # fv = query[0][0][0]
                 distance = []
                 for gfv in gallery_bb:
                     distance.append(np.linalg.norm(fv - gfv[:256]))
@@ -118,19 +116,21 @@ def classifier_eval(agrs):
 
         gt_bb_array, gt_cls_array = read_annotations(
             os.path.join(args.anno_dir, os.path.basename(result[0]).split('.')[0] + '.txt'))
-        print(np.array(result[1]))
-        print(gt_bb_array)
+        # throw away unidentified persons
+        gt_bb_array = gt_bb_array[gt_cls_array != -2]
+        gt_cls_array = gt_cls_array[gt_cls_array != -2]
+        if not len(gt_bb_array):
+            print('Frame with no identified pede encountered!')
+            continue
         if not len(result[1]):
             continue
         det_gt_cls_array, pos_ind = bb_cls_matching(np.array(result[1]), gt_bb_array, gt_cls_array, iou_thresh=0.7)
-        # print(len(result[1]))
-        # print(str(len(gt_bb_array)) + '\n')
-        # print(pos_ind[0])
         det_cls_array = np.argmax(np.array(result[2]), axis=1)
         # here we only consider the iou thresholded ones, this applies to gts as well
         num_tp += len(np.where(det_cls_array[pos_ind] == det_gt_cls_array[pos_ind]))
         num_gt += len(pos_ind)
-    # print(num_gt)
+    print(num_tp)
+    print(num_gt)
     print('Classification accuracy: ' + str(float(num_tp) / num_gt))
 
 if __name__ == '__main__':

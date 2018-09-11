@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from tensorpack import *
 from tensorpack.models import FullyConnected
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack.tfutils.summary import add_moving_summary, add_tensor_summary
 import tensorpack.utils.viz as tpviz
 
 from basemodel import (image_preprocess, resnet_c4_backbone,
@@ -260,24 +260,25 @@ class ResNetC4Model(DetectionModel):
 
 
             # acquire pred for re-id training
+            # turning NMS off gives re-id branch more training samples
             if cfg.RE_ID.NMS:
                 boxes, final_labels, final_probs = self.fastrcnn_inference(
                     image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
             else:
                 boxes, final_labels, final_probs = self.fastrcnn_inference_id(
                     image_shape2d, rcnn_boxes, fastrcnn_label_logits, fastrcnn_box_logits)
-            scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
-                            tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
-            final_boxes = boxes / scale
-            # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
-            final_boxes = tf_clip_boxes(final_boxes, orig_shape)
+            # scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
+            #                 tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
+            # final_boxes = boxes / scale
+            # # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
+            # final_boxes = tf_clip_boxes(final_boxes, orig_shape)
 
             # IOU, discard bad dets, assign re-id labels
             # the results are already NMS so no need to NMS again
             # crop from conv4 with dets (maybe plus gts)
             # feedforward re-id branch
             # resizing during ROIalign?
-            iou = pairwise_iou(boxes, gt_boxes)
+            iou = pairwise_iou(boxes, gt_boxes) # are the gt boxes resized?
             tp_mask = tf.reduce_max(iou, axis=1) >= cfg.RE_ID.IOU_THRESH
             iou = tf.boolean_mask(iou, tp_mask)
             # return iou to debug
@@ -285,6 +286,9 @@ class ResNetC4Model(DetectionModel):
             def re_id_loss(pred_boxes, pred_gt_ids,
                            featuremap):
                 with tf.variable_scope('id_head'):
+                    num_of_samples_used = tf.get_variable('num_of_samples_used', dtype=tf.uint32, initializer=0, trainable=False)
+                    num_of_samples_used.assign_add(tf.size(pred_boxes))
+
                     boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
                     # name scope?
                     # stop gradient
@@ -304,7 +308,7 @@ class ResNetC4Model(DetectionModel):
                                             labels=pred_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
 
-                return label_loss
+                return label_loss, num_of_samples_used
 
             def check_unid_pedes(iou, gt_ids, boxes, tp_mask,
                                  featuremap):
@@ -317,18 +321,19 @@ class ResNetC4Model(DetectionModel):
                 pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind) 
                 pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
 
-                ret = tf.cond(tf.equal(tf.size(pred_gt_ids), 0), 
-                              lambda: tf.constant(0.0),
+                ret = tf.cond(tf.equal(tf.size(pred_boxes), 0), 
+                              lambda: (tf.constant(0.0), tf.constant(0)),
                               lambda: re_id_loss(pred_boxes, pred_gt_ids,
                                                  featuremap))
                 return ret
 
             with tf.name_scope('id_head'):
                 # no detection has IOU > 0.7, re-id returns 0 loss
-                re_id_loss = tf.cond(tf.equal(tf.size(iou), 0), 
-                               lambda: tf.constant(0.0),
-                               lambda: check_unid_pedes(iou, gt_ids, boxes, tp_mask,
-                                                        featuremap))
+                re_id_loss, num_of_samples_used = tf.cond(tf.equal(tf.size(iou), 0), 
+                    lambda: (tf.constant(0.0), tf.constant(0)),
+                    lambda: check_unid_pedes(iou, gt_ids, 
+                        boxes, tp_mask, featuremap))
+                add_tensor_summary(num_of_samples_used, ['scalar'])
             # for debug, use tensor name to take out the handle
             # return re_id_loss
 
@@ -592,7 +597,19 @@ if __name__ == '__main__':
             session_init = get_model_loader(cfg.BACKBONE.WEIGHTS) if cfg.BACKBONE.WEIGHTS else None
 
         debug_mode = args.debug_mode
-        if debug_mode:
+        if not debug_mode:
+            traincfg = TrainConfig(
+                model=MODEL,
+                data=QueueInput(get_train_dataflow()),
+                callbacks=callbacks,
+                steps_per_epoch=stepnum,
+                max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
+                session_init=session_init,
+            )
+            # nccl mode has better speed than cpu mode
+            trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
+            launch_train_with_config(traincfg, trainer)
+        else:
             # test01
             # df = get_train_dataflow()
             # df.reset_state()
@@ -675,15 +692,4 @@ if __name__ == '__main__':
                                   input_handle[6]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
                     print(ret)
-        else:
-            traincfg = TrainConfig(
-                model=MODEL,
-                data=QueueInput(get_train_dataflow()),
-                callbacks=callbacks,
-                steps_per_epoch=stepnum,
-                max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
-                session_init=session_init,
-            )
-            # nccl mode has better speed than cpu mode
-            trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
-            launch_train_with_config(traincfg, trainer)
+
