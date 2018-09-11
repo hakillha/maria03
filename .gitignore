@@ -105,3 +105,4 @@ venv.bak/
 
 ckpt/
 train_log/
+*.jpg

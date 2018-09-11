@@ -148,3 +148,101 @@ def fastrcnn_losses(labels, label_logits, fg_boxes, fg_box_logits):
 
     add_moving_summary(label_loss, box_loss, accuracy, fg_accuracy, false_negative)
     return label_loss, box_loss
+
+@under_name_scope()
+def fastrcnn_predictions(boxes, probs):
+    """
+    Generate final results from predictions of all proposals.
+
+    Args:
+        boxes: n#catx4 floatbox in float32
+        probs: nx#class
+    """
+    assert boxes.shape[1] == cfg.DATA.NUM_CATEGORY
+    assert probs.shape[1] == cfg.DATA.NUM_CLASS
+    boxes = tf.transpose(boxes, [1, 0, 2])  # #catxnx4
+    probs = tf.transpose(probs[:, 1:], [1, 0])  # #catxn
+
+    def f(X):
+        """
+        prob: n probabilities
+        box: nx4 boxes
+
+        Returns: n boolean, the selection
+        """
+        prob, box = X
+        output_shape = tf.shape(prob)
+        # filter by score threshold
+        ids = tf.reshape(tf.where(prob > cfg.TEST.RESULT_SCORE_THRESH), [-1])
+        prob = tf.gather(prob, ids)
+        box = tf.gather(box, ids)
+        # NMS within each class
+        selection = tf.image.non_max_suppression(
+            box, prob, cfg.TEST.RESULTS_PER_IM, cfg.TEST.FRCNN_NMS_THRESH)
+        selection = tf.to_int32(tf.gather(ids, selection))
+        # sort available in TF>1.4.0
+        # sorted_selection = tf.contrib.framework.sort(selection, direction='ASCENDING')
+        sorted_selection = -tf.nn.top_k(-selection, k=tf.size(selection))[0]
+        mask = tf.sparse_to_dense(
+            sparse_indices=sorted_selection,
+            output_shape=output_shape,
+            sparse_values=True,
+            default_value=False)
+        return mask
+
+    # second dimension is still n, but the sparse vector
+    # only has cfg.TEST.RESULTS_PER_IM True entries?
+    masks = tf.map_fn(f, (probs, boxes), dtype=tf.bool,
+                      parallel_iterations=10)     # #cat x N
+    # print length of selected_indices
+    # better interpreted as selected_cordinates
+    # #selection(x#cat(across classes)) x 2, each is (cat_id, box_id)
+    selected_indices = tf.where(masks)
+    # #selection x 1
+    probs = tf.boolean_mask(probs, masks)
+
+    # filter again by sorting scores
+    # result is cat x #top values?
+    topk_probs, topk_indices = tf.nn.top_k(
+        probs,
+        tf.minimum(cfg.TEST.RESULTS_PER_IM, tf.size(probs)),
+        sorted=False)
+    filtered_selection = tf.gather(selected_indices, topk_indices)
+    # transform back to correspond to nx#cat
+    filtered_selection = tf.reverse(filtered_selection, axis=[1], name='filtered_indices')
+    return filtered_selection, topk_probs
+
+@under_name_scope()
+def fastrcnn_predictions_id(boxes, probs):
+    """
+    Generate final results from predictions of all proposals.
+
+    Args:
+        boxes: n#catx4 floatbox in float32
+        probs: nx#class
+    """
+    assert boxes.shape[1] == cfg.DATA.NUM_CATEGORY
+    assert probs.shape[1] == cfg.DATA.NUM_CLASS
+    boxes = tf.transpose(boxes, [1, 0, 2])  # #catxnx4
+    probs = tf.transpose(probs[:, 1:], [1, 0])  # #catxn
+
+    # second dimension is still n, but the sparse vector
+    # only has cfg.TEST.RESULTS_PER_IM True entries?
+    masks = tf.ones(tf.shape(probs))     # #cat x N
+    # print length of selected_indices
+    # better interpreted as selected_cordinates
+    # #selection(x#cat(across classes)) x 2, each is (cat_id, box_id)
+    selected_indices = tf.where(masks) # mask filters out NMSed indices, selected_indices is the kept indices
+    # #selection x 1
+    probs = tf.boolean_mask(probs, masks) # probs have same id set with selected_indices, so topk_indices must be the subset of selected_indices
+
+    # filter again by sorting scores
+    # result is cat x #top values?
+    topk_probs, topk_indices = tf.nn.top_k(
+        probs,
+        tf.minimum(cfg.TEST.RESULTS_PER_IM, tf.size(probs)),
+        sorted=False)
+    filtered_selection = tf.gather(selected_indices, topk_indices)
+    # transform back to correspond to nx#cat
+    filtered_selection = tf.reverse(filtered_selection, axis=[1], name='filtered_indices')
+    return filtered_selection, topk_probs

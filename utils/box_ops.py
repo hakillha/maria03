@@ -54,3 +54,19 @@ def pairwise_iou(boxlist1, boxlist2):
     return tf.where(
         tf.equal(intersections, 0.0),
         tf.zeros_like(intersections), tf.truediv(intersections, unions))
+
+@under_name_scope()
+def tf_clip_boxes(boxes, shape):
+  """
+    boxes: n x 4
+  """
+  boxes = tf.reshape(boxes, [-1, 4])
+  x1y1 = tf.slice(boxes, [0, 0], [-1, 2])
+  x2 = tf.slice(boxes, [0, 2], [-1, 1])
+  y2 = tf.slice(boxes, [0, 3], [-1, 1])
+  x1y1 = tf.clip_by_value(x1y1, tf.constant(0.0), tf.constant(10000.0))
+  x2 = tf.clip_by_value(x2, tf.constant(0.0), tf.to_float(shape[1]))
+  y2 = tf.clip_by_value(y2, tf.constant(0.0), tf.to_float(shape[0]))
+  x1 = tf.slice(x1y1, [0, 0], [-1, 1])
+  y1 = tf.slice(x1y1, [0, 1], [-1, 1])
+  return tf.stack([x1, y1, x2, y2])

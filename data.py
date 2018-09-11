@@ -7,7 +7,8 @@ import scipy.io
 import tqdm
 
 from tensorpack.dataflow import (imgaug, MultiProcessMapDataZMQ,
-                                 DataFromList,)
+                                 DataFromList, MapDataComponent,
+                                 MapData)
 from tensorpack.utils.argtools import memoized
 from tensorpack.utils.rect import FloatBox
 from tensorpack.utils.timer import timed_operation
@@ -30,6 +31,8 @@ class PRWDataset(object):
         self._basedir = basedir
         self._imgdir = pjoin(basedir, 'frames')
         self._annodir = pjoin(basedir, 'annotations')
+        if not cfg.DATA.CLASS_NAMES:
+            cfg.DATA.CLASS_NAMES = ['BG', 'pedestrian']
 
     def load(self, split_set='train'):
         """
@@ -42,53 +45,63 @@ class PRWDataset(object):
                 and (if split_set is 'train') 'boxes', 'class', 'is_crowd'.
         """
         with timed_operation('Load Groundtruth Boxes...'):
-            train_frame_list_mat = scipy.io.loadmat(pjoin(self._basedir, 'frame_' + split_set + '.mat'))
-            train_frame_list = train_frame_list_mat['img_index_' + split_set]
+            frame_list_mat = scipy.io.loadmat(pjoin(self._basedir, 'frame_' + split_set + '.mat'))
+            frame_list = frame_list_mat['img_index_' + split_set]
 
             imgs = []
             imgs_without_fg = 0
 
             # each iteration only reads one file so it's faster
-            for idx, frame in enumerate(train_frame_list):
+            for idx, frame in enumerate(frame_list):
                 img = {}
 
                 self._use_absolute_file_name(img, frame[0][0])
 
-                if frame[0][0][1] == '6':
-                    img['height'] = 576
-                    img['width'] = 720
-                else:
-                    img['height'] = 1080
-                    img['width'] = 1920
+                if split_set == 'train':
+                    if frame[0][0][1] == '6':
+                        img['height'] = 576
+                        img['width'] = 720
+                    else:
+                        img['height'] = 1080
+                        img['width'] = 1920
 
-                if split_set=='train':
                     anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
                     if 'box_new' in anno_data:
                         gt_bb_array = anno_data['box_new']
                     elif 'anno_file' in anno_data:
                         gt_bb_array = anno_data['anno_file']
+                    elif 'anno_previous' in anno_data:
+                        gt_bb_array = anno_data['anno_previous']
+                    else:
+                        raise Exception(frame[0][0] + ' bounding boxes info missing!')
 
                     # if true, include gts that are bg as well
-                    include_all = False
+                    # todo: since this option will rarely be used, re-id class not added yet
+                    include_all = cfg.DATA.INCLUDE_ALL
                     if include_all:
                         img['boxes'] = []
-                        for bb in gt_bb_array[:, 1:]:
-                            box = FloatBox(bb[0], bb[1], bb[2], bb[3])
+                        for bb in gt_bb_array:
+                            box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
                             box.clip_by_shape([img['height'], img['width']])
                             img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
                         img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
-                        img['class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
-                        img['class'][img['class'] == -1] = 1
+                        img['class'] = np.ones(len(gt_bb_array))
+
+                        img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
+                        img['re_id_class'][img['re_id_class'] == -1] = 1
                     else:
                         img['boxes'] = []
+                        # the 2-class detection class, pedestrian/bg
                         img['class'] = []
+                        img['re_id_class'] = []
                         for bb in gt_bb_array:
                             if bb[0] != -2:
-                                box = FloatBox(bb[1], bb[2], bb[3], bb[4])
+                                box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
                                 box.clip_by_shape([img['height'], img['width']])
                                 img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                                img['class'].append(bb[0])
+                                img['class'].append(1)
+                                img['re_id_class'].append(bb[0])
                             else:
                                 continue
 
@@ -97,13 +110,49 @@ class PRWDataset(object):
                             continue
                         img['boxes'] = np.asarray(img['boxes'], dtype='float32')
                         img['class'] = np.asarray(img['class'], dtype='int32')
+                        img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
 
-                    img['is_crowd'] = np.zeros(len(img['class']), dtype='int8')
+                    img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 
                 imgs.append(img)
 
-            print('Number of images without foreground objects: {}.'.format(imgs_without_fg))
+            print('Number of images without identified pedestrians: {}.'.format(imgs_without_fg))
             return imgs
+
+    def load_query(self):
+        imgs = []
+        with open(pjoin(self._basedir, 'query_info.txt'), 'r') as f:
+            for line in f:
+                img = {}
+                line_list = line.split()
+                self._use_absolute_file_name(img, line_list[5])
+
+                if line_list[5][1] == '6':
+                    img['height'] = 576
+                    img['width'] = 720
+                else:
+                    img['height'] = 1080
+                    img['width'] = 1920
+
+                x1 = float(line_list[1])
+                y1 = float(line_list[2])
+                w = float(line_list[3])
+                h = float(line_list[4])
+                box = FloatBox(x1, y1, x1 + w, y1 + h)
+                box.clip_by_shape([img['height'], img['width']])
+                img['boxes'] = []
+                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+
+                img['re_id_class'] = []
+                img['re_id_class'].append(line_list[0])
+                img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32') + 1
+
+                # we can remove this since it's only checked in dataflow processing
+                # img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
+                imgs.append(img)
+            
+        return imgs
 
     def _use_absolute_file_name(self, img, file_name):
         """
@@ -296,16 +345,19 @@ def get_train_dataflow():
     is_crowd: k booleans. Use k False if you don't know what it means.
     """
 
-    ds = DataFromList(imgs, shuffle=True)
+    ds = DataFromList(imgs, shuffle=cfg.DATA.TEST.SHUFFLE)
 
     # imgaug.Flip(horiz=True)
     aug = imgaug.AugmentorList(
         [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
 
     def preprocess(img):
-        fname, boxes, klass, is_crowd = img['file_name'], img['boxes'], img['class'], img['is_crowd']
+        fname, boxes, klass, is_crowd, re_id_class = img['file_name'], img['boxes'], \
+                                                     img['class'], img['is_crowd'], img['re_id_class']
         boxes = np.copy(boxes)
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        orig_shape = im.shape[:2]
+        orig_im = np.copy(im)
         assert im is not None, fname
         im = im.astype('float32')
         # assume floatbox as input
@@ -332,14 +384,14 @@ def get_train_dataflow():
             log_once("Input {} is filtered for training: {}".format(fname, str(e)), 'warn')
             return None
 
-        ret = [im] + list(anchor_inputs) + [boxes, klass]
+        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class, orig_shape, orig_im]
 
         return ret
 
     ds = MultiProcessMapDataZMQ(ds, 10, preprocess)
-    return ds
+    return ds 
 
-def get_eval_data_flow(shard=0, num_shards=1):
+def get_eval_dataflow(shard=0, num_shards=1):
     """
     Args:
         shard, num_shards: to get subset of evaluation data
@@ -351,7 +403,8 @@ def get_eval_data_flow(shard=0, num_shards=1):
     img_range = (shard * img_per_shard, (shard + 1) * img_per_shard if shard + 1 < num_shards else num_imgs)
 
     # no filter for training
-    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], 'file_name')
+    # test if it can repeat keys
+    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], ['file_name', 'file_name'])
 
     def f(fname):
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
@@ -360,3 +413,73 @@ def get_eval_data_flow(shard=0, num_shards=1):
     ds = MapDataComponent(ds, f, 0)
     # Evaluation itself may be multi-threaded, therefore don't add prefetch here.
     return ds
+
+def get_query_dataflow():
+    """
+    Args:
+        shard, num_shards: to get subset of evaluation data
+    """
+    prw = PRWDataset(cfg.DATA.BASEDIR)
+    imgs = prw.load_query()
+
+    # no filter for training
+    # test if it can repeat keys
+    ds = DataFromList(imgs, shuffle=False)
+
+    aug = imgaug.AugmentorList(
+        [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
+
+    def preprocess(img):
+        fname, boxes, re_id_class = img['file_name'], img['boxes'], img['re_id_class']
+        boxes = np.copy(boxes)
+        im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        assert im is not None, fname
+        im = im.astype('float32')
+        # assume floatbox as input
+        assert boxes.dtype == np.float32, "Loader has to return floating point boxes!"
+
+        # augmentation:
+        im, params = aug.augment_return_params(im)
+        points = box_to_point8(boxes)
+        points = aug.augment_coords(points, params)
+        boxes = point8_to_box(points)
+        assert np.min(np_area(boxes)) > 0, "Some boxes have zero area!"
+
+        ret = [im, boxes, re_id_class]
+
+        return ret
+
+    ds = MapData(ds, preprocess)
+    return ds
+
+def get_train_aseval_dataflow():
+    """
+    Args:
+        shard, num_shards: to get subset of evaluation data
+    """
+    prw = PRWDataset(cfg.DATA.BASEDIR)
+    imgs = prw.load()
+
+    # no filter for training
+    # test if it can repeat keys
+    ds = DataFromList(imgs, shuffle=False)
+
+    aug = imgaug.AugmentorList(
+        [CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
+
+    def preprocess(img):
+        fname = img['file_name']
+        im = cv2.imread(fname, cv2.IMREAD_COLOR)
+        orig_shape = im.shape[:2]
+        assert im is not None, fname
+        im = im.astype('float32')
+
+        # augmentation:
+        im, params = aug.augment_return_params(im)
+
+        ret = [fname, im, orig_shape]
+
+        return ret
+
+    ds = MapData(ds, preprocess)
+    return ds 

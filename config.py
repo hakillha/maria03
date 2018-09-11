@@ -62,11 +62,14 @@ _C.MODE_MASK = False        # FasterRCNN or MaskRCNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/'
+_C.DATA.BASEDIR = '../PRW-v16.04.20'
 _C.DATA.TRAIN = ['train2014', 'valminusminival2014']   # i.e., trainval35k
 _C.DATA.VAL = 'minival2014'   # For now, only support evaluation on single dataset
-_C.DATA.NUM_CATEGORY = 933    # 80 categories.
+_C.DATA.NUM_CATEGORY = 1    # 80 categories. Plus bg or not?
+_C.DATA.NUM_ID = 934
 _C.DATA.CLASS_NAMES = []  # NUM_CLASS (NUM_CATEGORY+1) strings, to be populated later by data loader. The first is BG.
+_C.DATA.INCLUDE_ALL = True
+_C.DATA.TEST.SHUFFLE = True
 
 # basemodel ----------------------
 _C.BACKBONE.WEIGHTS = 'ckpt/ImageNet-R50-AlignPadding.npz'   # /path/to/weights.npz
@@ -136,6 +139,21 @@ _C.FRCNN.BATCH_PER_IM = 256
 _C.FRCNN.BBOX_REG_WEIGHTS = [10., 10., 5., 5.]  # Better but non-standard setting: [20, 20, 10, 10]
 _C.FRCNN.FG_THRESH = 0.5
 _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
+
+# re-id branch
+_C.RE_ID.IOU_THRESH = 0.7
+_C.RE_ID.NMS = True
+_C.RE_ID.QUERY_EVAL = False
+_C.RE_ID.LOSS_NORMALIZATION = 1.0
+
+# testing -----------------------
+_C.TEST.FRCNN_NMS_THRESH = 0.5
+
+# Smaller threshold value gives significantly better mAP. But we use 0.05 for consistency with Detectron.
+# mAP with 1e-4 threshold can be found at https://github.com/tensorpack/tensorpack/commit/26321ae58120af2568bdbf2269f32aa708d425a8#diff-61085c48abee915b584027e1085e1043  # noqa
+_C.TEST.RESULT_SCORE_THRESH = 0.05
+_C.TEST.RESULT_SCORE_THRESH_VIS = 0.3   # only visualize confident results
+_C.TEST.RESULTS_PER_IM = 100
 
 def finalize_configs(is_training):
     """
