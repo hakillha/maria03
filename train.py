@@ -333,7 +333,7 @@ class ResNetC4Model(DetectionModel):
                     lambda: (tf.constant(0.0), tf.constant(0)),
                     lambda: check_unid_pedes(iou, gt_ids, 
                         boxes, tp_mask, featuremap))
-                add_tensor_summary(num_of_samples_used, ['scalar'])
+                add_tensor_summary(num_of_samples_used, ['scalar'], name='id_head/num_of_samples_used')
             # for debug, use tensor name to take out the handle
             # return re_id_loss
 
