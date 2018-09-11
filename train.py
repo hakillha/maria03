@@ -180,8 +180,8 @@ class DetectionModel(ModelDesc):
             [str]: input names
             [str]: output names
         """
-        # out = ['final_boxes', 're_id_probs']
-        out = ['rescaled_final_boxes', 're_id_probs', 're_boxes_pre_clip']
+        out = ['rescaled_final_boxes', 're_id_probs']
+        # out = ['rescaled_final_boxes', 're_id_probs', 're_boxes_pre_clip']
         return ['image', 'orig_shape'], out
 
 
@@ -388,7 +388,7 @@ class ResNetC4Model(DetectionModel):
                             tf.cast(image_shape2d[1], tf.float32) / tf.cast(orig_shape[1], tf.float32))
             rescaled_final_boxes = final_boxes / scale
             # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
-            rescaled_final_boxes_pre_clip = tf.identity(rescaled_final_boxes, name='re_boxes_pre_clip')
+            # rescaled_final_boxes_pre_clip = tf.identity(rescaled_final_boxes, name='re_boxes_pre_clip')
             rescaled_final_boxes = tf_clip_boxes(rescaled_final_boxes, orig_shape)
             rescaled_final_boxes = tf.identity(rescaled_final_boxes, 'rescaled_final_boxes')
 
