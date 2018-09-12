@@ -594,18 +594,20 @@ if __name__ == '__main__':
         else:
             session_init = get_model_loader(cfg.BACKBONE.WEIGHTS) if cfg.BACKBONE.WEIGHTS else None
 
+        if args.additional_monitoring:
+            extra_callbacks = [MergeAllSummaries(period=1)]
+            extra_monitors = [ScalarPrinter(enable_step=True, whitelist=['num_of_samples_used', 'loss'])]
+
         debug_mode = args.debug_mode
         if not debug_mode:
             traincfg = TrainConfig(
                 model=MODEL,
                 data=QueueInput(get_train_dataflow()),
-                callbacks=callbacks + 
-                    [MergeAllSummaries(period=1)],
+                callbacks=callbacks + extra_callbacks,
                 steps_per_epoch=stepnum,
                 max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
                 session_init=session_init,
-                monitors=DEFAULT_MONITORS() + 
-                [ScalarPrinter(enable_step=True, whitelist=['num_of_samples_used', 'loss'])]
+                monitors=DEFAULT_MONITORS() + extra_monitors
             )
             # nccl mode has better speed than cpu mode
             trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
