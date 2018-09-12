@@ -599,13 +599,10 @@ if __name__ == '__main__':
             traincfg = TrainConfig(
                 model=MODEL,
                 data=QueueInput(get_train_dataflow()),
-                callbacks=callbacks + 
-                    [MergeAllSummaries(period=1)],
+                callbacks=callbacks,
                 steps_per_epoch=stepnum,
                 max_epoch=cfg.TRAIN.LR_SCHEDULE[-1] * factor // stepnum,
                 session_init=session_init,
-                monitors=DEFAULT_MONITORS() + 
-                [ScalarPrinter(enable_step=True, whitelist=['num_of_samples_used', 'loss'])]
             )
             # nccl mode has better speed than cpu mode
             trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=False, mode='nccl')
