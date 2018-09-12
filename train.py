@@ -283,11 +283,11 @@ class ResNetC4Model(DetectionModel):
             iou = tf.boolean_mask(iou, tp_mask)
             # return iou to debug
 
-            def re_id_loss(pred_boxes, pred_gt_ids,
+            def re_id_loss(pred_boxes, pred_matching_gt_ids,
                            featuremap):
                 with tf.variable_scope('id_head'):
                     num_of_samples_used = tf.get_variable('num_of_samples_used', initializer=0, trainable=False)
-                    num_of_samples_used.assign_add(tf.shape(pred_boxes)[0])
+                    num_of_samples_used = num_of_samples_used.assign_add(tf.shape(pred_boxes)[0])
 
                     boxes_on_featuremap = pred_boxes * (1.0 / cfg.RPN.ANCHOR_STRIDE)
                     # name scope?
@@ -305,7 +305,7 @@ class ResNetC4Model(DetectionModel):
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
                 label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                                            labels=pred_gt_ids, logits=id_logits)
+                                            labels=pred_matching_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
 
                 return label_loss, num_of_samples_used
@@ -315,23 +315,23 @@ class ResNetC4Model(DetectionModel):
                 pred_gt_ind = tf.argmax(iou, axis=1)
                 # output following tensors
                 # pick out the -2 class here
-                pred_gt_ids = tf.gather(gt_ids, pred_gt_ind)
+                pred_matching_gt_ids = tf.gather(gt_ids, pred_gt_ind)
                 pred_boxes = tf.boolean_mask(boxes, tp_mask)
                 # label 1 corresponds to unid pedes
-                unid_ind = tf.not_equal(pred_gt_ids, 1)
-                pred_gt_ids = tf.boolean_mask(pred_gt_ids, unid_ind) 
+                unid_ind = tf.not_equal(pred_matching_gt_ids, 1)
+                pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, unid_ind) 
                 pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
 
                 ret = tf.cond(tf.equal(tf.size(pred_boxes), 0), 
-                              lambda: (tf.constant(0.0), tf.constant(0)),
-                              lambda: re_id_loss(pred_boxes, pred_gt_ids,
+                              lambda: (tf.constant(cfg.RE_ID.STABLE_LOSS), tf.constant(0)),
+                              lambda: re_id_loss(pred_boxes, pred_matching_gt_ids,
                                                  featuremap))
                 return ret
 
             with tf.name_scope('id_head'):
                 # no detection has IOU > 0.7, re-id returns 0 loss
                 re_id_loss, num_of_samples_used = tf.cond(tf.equal(tf.size(iou), 0), 
-                    lambda: (tf.constant(0.0), tf.constant(0)),
+                    lambda: (tf.constant(cfg.RE_ID.STABLE_LOSS), tf.constant(0)),
                     lambda: check_unid_pedes(iou, gt_ids, 
                         boxes, tp_mask, featuremap))
                 add_tensor_summary(num_of_samples_used, ['scalar'], name='num_of_samples_used')
@@ -363,11 +363,7 @@ class ResNetC4Model(DetectionModel):
                 wd_cost], 'total_cost')
 
             add_moving_summary(total_cost, wd_cost)
-            # return total_cost
-            return total_cost, num_of_samples_used
-            # return re_id_loss
-            # return total_cost, boxes, final_probs, final_labels
-            # return total_cost, final_boxes, final_probs, final_labels
+            return total_cost
         else:
             if cfg.RE_ID.QUERY_EVAL:
                 # resize the gt_boxes in dataflow
@@ -693,5 +689,5 @@ if __name__ == '__main__':
                                   input_handle[5]: gt_ids,
                                   input_handle[6]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
-                    print(ret[1])
+                    print(ret)
 

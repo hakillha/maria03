@@ -145,6 +145,10 @@ _C.RE_ID.IOU_THRESH = 0.7
 _C.RE_ID.NMS = True
 _C.RE_ID.QUERY_EVAL = False
 _C.RE_ID.LOSS_NORMALIZATION = 1.0
+# a small constant loss for re-id head when there is no det to stablize the moving average?
+# or should it be a large value instead?
+# _C.RE_ID.STABLE_LOSS = 1e-3
+_C.RE_ID.STABLE_LOSS = 10.0
 
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5
