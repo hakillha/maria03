@@ -349,7 +349,9 @@ class ResNetC4Model(DetectionModel):
 
             # return tf.shape(boxes)[0]
 
+            unnormed_id_loss = tf.identity(re_id_loss, name='unnormed_id_loss')
             re_id_loss = tf.divide(re_id_loss, cfg.RE_ID.LOSS_NORMALIZATION, 're_id_loss')
+            add_moving_summary(unnormed_id_loss)
             add_moving_summary(re_id_loss)
 
             wd_cost = regularize_cost(
