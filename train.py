@@ -197,12 +197,13 @@ class ResNetC4Model(DetectionModel):
             tf.placeholder(tf.float32, (None, 4), 'gt_boxes'),
             tf.placeholder(tf.int64, (None,), 'gt_labels'),  # all > 0
             tf.placeholder(tf.int64, (None,), 'gt_ids'),
+            tf.placeholder(tf.int64, (None, cfg.DATA.NUM_ID), 'gt_id_prob_dist'),
             tf.placeholder(tf.int64, (2,), 'orig_shape')]
         return ret
 
     def build_graph(self, *inputs):
         is_training = get_current_tower_context().is_training
-        image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape = inputs
+        image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, gt_id_prob_dist, orig_shape = inputs
         image = self.preprocess(image)     # 1CHW
 
         featuremap = resnet_c4_backbone(image, cfg.BACKBONE.RESNET_NUM_BLOCK[:3])
@@ -286,7 +287,7 @@ class ResNetC4Model(DetectionModel):
             # return iou to debug
 
             def re_id_loss(pred_boxes, pred_matching_gt_ids,
-                           featuremap):
+                           pred_matching_gt_id_dist, featuremap):
                 with tf.variable_scope('id_head'):
                     num_of_samples_used = tf.get_variable('num_of_samples_used', initializer=0, trainable=False)
                     num_of_samples_used = num_of_samples_used.assign_add(tf.shape(pred_boxes)[0])
@@ -323,8 +324,12 @@ class ResNetC4Model(DetectionModel):
                             kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
                 # use sparse into dense to create 1 one vector
-                label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                                            labels=pred_matching_gt_ids, logits=id_logits)
+                if cfg.RE_ID.LSRO:
+                    label_loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+                                                labels=pred_matching_gt_id_dist, logits=id_logits)
+                else:
+                    label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                                                labels=pred_matching_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
 
                 return label_loss, num_of_samples_used
@@ -335,16 +340,40 @@ class ResNetC4Model(DetectionModel):
                 # output following tensors
                 # pick out the -2 class here
                 pred_matching_gt_ids = tf.gather(gt_ids, pred_gt_ind)
+                pred_matching_gt_id_dist = tf.gather(gt_id_prob_dist, pred_gt_ind)
                 pred_boxes = tf.boolean_mask(boxes, tp_mask)
                 # label 1 corresponds to unid pedes
-                proper_id_ind = tf.not_equal(pred_matching_gt_ids, -2)
-                pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, proper_id_ind) 
-                pred_boxes = tf.boolean_mask(pred_boxes, proper_id_ind)
+                labeled_id_ind = tf.not_equal(pred_matching_gt_ids, -2)
+                # if cfg.RE_ID.LSRO:
+                #     cond on if both types are 
+                #     labeled_pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, labeled_id_ind)
+                #     pred_matching_labeled_gt_dist = tf.to_float(tf.map_fn(lambda x: tf.sparse_to_dense(x - 1, [cfg.DATA.NUM_ID], 1), 
+                #                                     labeled_pred_matching_gt_ids))
+                #     unlabeled_id_ind = tf.logical_not(labeled_id_ind)
+                #     pred_matching_unlabeled_gt_dist = tf.map_fn(lambda x: x / cfg.DATA.NUM_ID, 
+                #         tf.ones((tf.shape(tf.where(unlabeled_id_ind))[0], cfg.DATA.NUM_ID), dtype=tf.float32))
+                        
+                #     # gt_prob_dist = tf.scatter_update(gt_prob_dist, tf.where(labeled_id_ind), pred_matching_labeled_gt_dist)
+                #     # need to redefine gt_prob_dist as a var to make it work
+                #     # if I can scatter_update then I don't have to rearrange the box tensor as well 
+                #     # keep all confident pede boxes as opposed to no LSRO
+                #     labeled_pred_boxes = tf.boolean_mask(pred_boxes, labeled_id_ind)
+                #     unlabeled_pred_boxes = tf.boolean_mask(pred_boxes, unlabeled_id_ind)
+                #     pred_matching_gt_dist = tf.reshape(tf.stack([pred_matching_labeled_gt_dist, 
+                #                                                  pred_matching_unlabeled_gt_dist]), [-1, cfg.DATA.NUM_ID])
+                #     pred_boxes = tf.reshape(tf.stack([labeled_pred_boxes,
+                #                                       unlabeled_pred_boxes]), [-1, 4])
+                #     pred_matching_gt_ids = None
+                # else:
+                if not cfg.RE_ID.LSRO: # then throw away unlabeled boxes and ids
+                    pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, labeled_id_ind) 
+                    pred_boxes = tf.boolean_mask(pred_boxes, labeled_id_ind)
+                    pred_matching_gt_dist = None
 
                 ret = tf.cond(tf.equal(tf.size(pred_boxes), 0), 
                               lambda: (tf.constant(cfg.RE_ID.STABLE_LOSS), tf.constant(0)),
                               lambda: re_id_loss(pred_boxes, pred_matching_gt_ids,
-                                                 featuremap))
+                                                 pred_matching_gt_id_dist, featuremap))
                 return ret
 
             with tf.name_scope('id_head'):
@@ -373,7 +402,7 @@ class ResNetC4Model(DetectionModel):
             unnormed_id_loss = tf.identity(re_id_loss, name='unnormed_id_loss')
             re_id_loss = tf.divide(re_id_loss, cfg.RE_ID.LOSS_NORMALIZATION, 're_id_loss')
             add_moving_summary(unnormed_id_loss)
-            add_moving_summary(re_id_loss)
+            # add_moving_summary(re_id_loss)
 
             wd_cost = regularize_cost(
                 '.*/W', l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
@@ -671,14 +700,15 @@ if __name__ == '__main__':
                 session_init._setup_graph()
                 session_init._run_init(sess)
                 for _ in range(10):
-                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, orig_shape, orig_im = next(df_gen)
+                    image, anchor_labels, anchor_boxes, gt_boxes, gt_labels, gt_ids, gt_id_prob_dist, orig_shape, orig_im = next(df_gen)
                     input_dict = {input_handle[0]: image,
                                   input_handle[1]: anchor_labels,
                                   input_handle[2]: anchor_boxes,
                                   input_handle[3]: gt_boxes,
                                   input_handle[4]: gt_labels,
                                   input_handle[5]: gt_ids,
-                                  input_handle[6]: orig_shape}
+                                  input_handle[6]: gt_id_prob_dist,
+                                  input_handle[7]: orig_shape}
                     ret = sess.run(ret_handle, input_dict)
                     print(ret)
 

@@ -156,6 +156,7 @@ _C.RE_ID.LOSS_NORMALIZATION = 4.5
 _C.RE_ID.STABLE_LOSS = 0.1
 _C.RE_ID.FC_LAYERS_ON = True
 _C.RE_ID.COSINE_SOFTMAX = False
+_C.RE_ID.LSRO = False
 
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5

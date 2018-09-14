@@ -356,7 +356,13 @@ def get_train_dataflow():
             log_once("Input {} is filtered for training: {}".format(fname, str(e)), 'warn')
             return None
 
-        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class, orig_shape, orig_im]
+        gt_id_prob_dist = np.zeros([len(re_id_class), cfg.DATA.NUM_ID])
+        for obj_index, identity in enumerate(re_id_class):
+            if identity != -2:
+                gt_id_prob_dist[obj_index, identity - 1] = 1.
+        gt_id_prob_dist[re_id_class == -2] = np.ones(cfg.DATA.NUM_ID, dtype=float) / cfg.DATA.NUM_ID
+
+        ret = [im] + list(anchor_inputs) + [boxes, klass, re_id_class, gt_id_prob_dist, orig_shape, orig_im]
 
         return ret
 
