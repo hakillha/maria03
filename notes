@@ -52,3 +52,11 @@ python train.py --config \
 DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ \
 BACKBONE.WEIGHTS=train_log/frcnn_prw_id_09_05_06_backup/model-420000 \
 --logdir=train_log/test04
+
+python train.py --config \
+DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ \
+BACKBONE.WEIGHTS=ckpt/ImageNet-R50-AlignPadding.npz \
+RE_ID.COSINE_SOFTMAX=True \
+RE_ID.FC_LAYERS_ON = False \
+RE_ID.NMS=False \
+--logdir=train_log/test_09_14
