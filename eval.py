@@ -4,6 +4,7 @@ import tqdm
 from collections import namedtuple
 from contextlib import ExitStack
 
+from tensorpack import * # to import Callback
 from tensorpack.utils.utils import get_tqdm_kwargs
 
 from common import CustomResize, clip_boxes
@@ -184,3 +185,62 @@ def classifier_eval_output(df, pred_func, tqdm_bar=None):
             all_results.append(result_list)
             tqdm_bar.update(1)
     return all_results
+
+
+class EvalCallback(Callback):
+    """
+    A callback that runs COCO evaluation once a while.
+    It supports multi-GPU evaluation if TRAINER=='replicated' and single-GPU evaluation if TRAINER=='horovod'
+    """
+
+    def __init__(self, in_names, out_names):
+        self._in_names, self._out_names = in_names, out_names
+
+    def _setup_graph(self):
+        num_gpu = cfg.TRAIN.NUM_GPUS
+        # Use two predictor threads per GPU to get better throughput
+        self.num_predictor = num_gpu * 2
+        self.predictors = [self._build_predictor(k % num_gpu) for k in range(self.num_predictor)]
+        self.dataflows = [get_eval_dataflow(shard=k, num_shards=self.num_predictor)
+                          for k in range(self.num_predictor)]
+
+    def _build_predictor(self, idx):
+        graph_func = self.trainer.get_predictor(self._in_names, self._out_names, device=idx)
+        return lambda img: detect_one_image(img, graph_func)
+
+    def _before_train(self):
+        num_eval = cfg.TRAIN.NUM_EVALS
+        interval = max(self.trainer.max_epoch // (num_eval + 1), 1)
+        self.epochs_to_eval = set([interval * k for k in range(1, num_eval + 1)])
+        self.epochs_to_eval.add(self.trainer.max_epoch)
+        # for debug purpose
+        # self.epochs_to_eval.update([0, 1])
+        if len(self.epochs_to_eval) < 15:
+            logger.info("[EvalCallback] Will evaluate at epoch " + str(sorted(self.epochs_to_eval)))
+        else:
+            logger.info("[EvalCallback] Will evaluate every {} epochs".format(interval))
+
+    def _eval(self):
+        # with ThreadPoolExecutor(max_workers=self.num_predictor, thread_name_prefix='EvalWorker') as executor, \
+        # compatible with python 3.5
+        with ThreadPoolExecutor(max_workers=self.num_predictor) as executor, \
+                tqdm.tqdm(total=sum([df.size() for df in self.dataflows])) as pbar:
+            futures = []
+            for dataflow, pred in zip(self.dataflows, self.predictors):
+                futures.append(executor.submit(eval_output, dataflow, pred, pbar))
+            all_results = list(itertools.chain(*[fut.result() for fut in futures]))
+
+        output_file = os.path.join(
+            logger.get_logger_dir(), 'outputs{}.json'.format(self.global_step))
+        with open(output_file, 'w') as f:
+            json.dump(all_results, f)
+        # try:
+        #     scores = print_evaluation_scores(output_file)
+        #     for k, v in scores.items():
+        #         self.trainer.monitors.put_scalar(k, v)
+        # except Exception:
+        #     logger.exception("Exception in COCO evaluation.")
+
+    def _trigger_epoch(self):
+        if self.epoch_num in self.epochs_to_eval:
+            self._eval()

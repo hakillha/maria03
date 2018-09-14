@@ -74,43 +74,14 @@ class PRWDataset(object):
                         gt_bb_array = anno_data['anno_previous']
                     else:
                         raise Exception(frame[0][0] + ' bounding boxes info missing!')
-
-                    # if true, include gts that are bg as well
-                    # todo: since this option will rarely be used, re-id class not added yet
-                    include_all = cfg.DATA.INCLUDE_ALL
-                    if include_all:
-                        img['boxes'] = []
-                        for bb in gt_bb_array:
-                            box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
-                            box.clip_by_shape([img['height'], img['width']])
-                            img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-
-                        img['class'] = np.ones(len(gt_bb_array))
-
-                        img['re_id_class'] = np.asarray(gt_bb_array[:, 0] + 1, dtype='int32')
-                        img['re_id_class'][img['re_id_class'] == -1] = 1
-                    else:
-                        img['boxes'] = []
-                        # the 2-class detection class, pedestrian/bg
-                        img['class'] = []
-                        img['re_id_class'] = []
-                        for bb in gt_bb_array:
-                            if bb[0] != -2:
-                                box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
-                                box.clip_by_shape([img['height'], img['width']])
-                                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
-                                img['class'].append(1)
-                                img['re_id_class'].append(bb[0])
-                            else:
-                                continue
-
-                        if len(img['boxes']) == 0:
-                            imgs_without_fg += 1
-                            continue
-                        img['boxes'] = np.asarray(img['boxes'], dtype='float32')
-                        img['class'] = np.asarray(img['class'], dtype='int32')
-                        img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32')
+                    img['boxes'] = []
+                    for bb in gt_bb_array:
+                        box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
+                        box.clip_by_shape([img['height'], img['width']])
+                        img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+                    img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+                    img['class'] = np.ones(len(gt_bb_array))
+                    img['re_id_class'] = np.asarray(gt_bb_array[:, 0], dtype='int32')
 
                     img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 
@@ -146,7 +117,8 @@ class PRWDataset(object):
 
                 img['re_id_class'] = []
                 img['re_id_class'].append(line_list[0])
-                img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32') + 1
+                # ? this prob doesn't matter since unlabeled pedes are not considered in eval
+                # img['re_id_class'] = np.asarray(img['re_id_class'], dtype='int32') + 1
 
                 # we can remove this since it's only checked in dataflow processing
                 # img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')

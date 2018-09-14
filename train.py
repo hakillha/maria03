@@ -24,7 +24,9 @@ from data import (get_train_dataflow, get_all_anchors,
                   get_train_aseval_dataflow)
 from eval import (detect_one_image, eval_output,
                   DetectionResult, query_eval_output,
-                  classifier_eval_output)
+                  classifier_eval_output,
+                  # EvalCallback
+                  )
 from model_box import (RPNAnchors, roi_align,
                        encode_bbox_target, crop_and_resize,
                        decode_bbox_target,clip_boxes)
@@ -296,14 +298,31 @@ class ResNetC4Model(DetectionModel):
                     feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
                     feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
 
-                    init = tf.variance_scaling_initializer()
-                    hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                    hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
-                    hidden = FullyConnected('fc8', hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
-                    id_logits = FullyConnected(
-                        'class', hidden, cfg.DATA.NUM_ID,
-                        kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+                    if cfg.RE_ID.FC_LAYERS_ON:
+                        init = tf.variance_scaling_initializer()
+                        # first dimension of the output tensor being batch size
+                        hidden = FullyConnected('fc6', feature_gap, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                        hidden = FullyConnected('fc7', hidden, 1024, kernel_initializer=init, activation=tf.nn.relu)
+                        hidden = FullyConnected('fc8', hidden, 256, kernel_initializer=init, activation=tf.nn.relu)
+                    else:
+                        hidden = feature_gap
 
+                    if cfg.RE_ID.COSINE_SOFTMAX:
+                        mean_vectors = tf.get_variable('mean_vectors', (hidden.shape[-1], int(cfg.DATA.NUM_ID)),
+                            initializer=tf.truncated_normal_initializer(stddev=1e-3), regularizer=None)
+                        # log cos_scale
+                        cos_scale = tf.get_variable('cos_scale', (), tf.float32,
+                            initializer=tf.constant_initializer(0.0), regularizer=tf.contrib.layers.l2_regularizer(1e-1))
+                        cos_scale = tf.nn.softplus(cos_scale)
+
+                        mean_vectors = tf.nn.l2_normalize(mean_vectors, axis=0)
+                        id_logits = cos_scale * tf.matmul(hidden, mean_vectors)
+                    else:
+                        id_logits = FullyConnected(
+                            'class', hidden, cfg.DATA.NUM_ID,
+                            kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+
+                # use sparse into dense to create 1 one vector
                 label_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                                             labels=pred_matching_gt_ids, logits=id_logits)
                 label_loss = tf.reduce_mean(label_loss, name='label_loss')
@@ -318,9 +337,9 @@ class ResNetC4Model(DetectionModel):
                 pred_matching_gt_ids = tf.gather(gt_ids, pred_gt_ind)
                 pred_boxes = tf.boolean_mask(boxes, tp_mask)
                 # label 1 corresponds to unid pedes
-                unid_ind = tf.not_equal(pred_matching_gt_ids, 1)
-                pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, unid_ind) 
-                pred_boxes = tf.boolean_mask(pred_boxes, unid_ind)
+                proper_id_ind = tf.not_equal(pred_matching_gt_ids, -2)
+                pred_matching_gt_ids = tf.boolean_mask(pred_matching_gt_ids, proper_id_ind) 
+                pred_boxes = tf.boolean_mask(pred_boxes, proper_id_ind)
 
                 ret = tf.cond(tf.equal(tf.size(pred_boxes), 0), 
                               lambda: (tf.constant(cfg.RE_ID.STABLE_LOSS), tf.constant(0)),
@@ -334,7 +353,9 @@ class ResNetC4Model(DetectionModel):
                     lambda: (tf.constant(cfg.RE_ID.STABLE_LOSS), tf.constant(0)),
                     lambda: check_unid_pedes(iou, gt_ids, 
                         boxes, tp_mask, featuremap))
+
                 add_tensor_summary(num_of_samples_used, ['scalar'], name='num_of_samples_used')
+            tf.add_to_collection('re_id_summaries_misc', num_of_samples_used)
             # for debug, use tensor name to take out the handle
             # return re_id_loss
 
@@ -382,11 +403,29 @@ class ResNetC4Model(DetectionModel):
                 feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
                 feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
 
-                hidden = FullyConnected('fc6', feature_gap, 1024, activation=tf.nn.relu)
-                hidden = FullyConnected('fc7', hidden, 1024, activation=tf.nn.relu)
-                fv = FullyConnected('fc8', hidden, 256, activation=tf.nn.relu)
-                id_logits = FullyConnected(
-                        'class', fv, cfg.DATA.NUM_ID,
+                if cfg.RE_ID.FC_LAYERS_ON:
+                    hidden = FullyConnected('fc6', feature_gap, 1024, activation=tf.nn.relu)
+                    hidden = FullyConnected('fc7', hidden, 1024, activation=tf.nn.relu)
+                    fv = FullyConnected('fc8', hidden, 256, activation=tf.nn.relu)
+                else:
+                    fv = feature_gap
+
+                if cfg.RE_ID.COSINE_SOFTMAX:
+                    # do we need to consider reuse here? 
+                    # no cuz these are 2 different branches of the if control flow statement, 
+                    # i.e. we are not trying to use the same var by repeatedly defining/annoucing them?
+                    mean_vectors = tf.get_variable('mean_vectors', (hidden.shape[-1], int(cfg.DATA.NUM_ID)),
+                        initializer=tf.truncated_normal_initializer(stddev=1e-3), regularizer=None)
+                    # log cos_scale
+                    cos_scale = tf.get_variable('cos_scale', (), tf.float32,
+                        initializer=tf.constant_initializer(0.0), regularizer=tf.contrib.layers.l2_regularizer(1e-1))
+                    cos_scale = tf.nn.softplus(cos_scale)
+
+                    mean_vectors = tf.nn.l2_normalize(mean_vectors, axis=0)
+                    id_logits = cos_scale * tf.matmul(hidden, mean_vectors)
+                else:
+                    id_logits = FullyConnected(
+                        'class', hidden, cfg.DATA.NUM_ID,
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
             scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
@@ -399,66 +438,6 @@ class ResNetC4Model(DetectionModel):
 
             fv = tf.identity(fv, name='feature_vector')
             prob = tf.nn.softmax(id_logits, name='re_id_probs')
-
-
-class EvalCallback(Callback):
-    """
-    A callback that runs COCO evaluation once a while.
-    It supports multi-GPU evaluation if TRAINER=='replicated' and single-GPU evaluation if TRAINER=='horovod'
-    """
-
-    def __init__(self, in_names, out_names):
-        self._in_names, self._out_names = in_names, out_names
-
-    def _setup_graph(self):
-        num_gpu = cfg.TRAIN.NUM_GPUS
-        # Use two predictor threads per GPU to get better throughput
-        self.num_predictor = num_gpu * 2
-        self.predictors = [self._build_predictor(k % num_gpu) for k in range(self.num_predictor)]
-        self.dataflows = [get_eval_dataflow(shard=k, num_shards=self.num_predictor)
-                          for k in range(self.num_predictor)]
-
-    def _build_predictor(self, idx):
-        graph_func = self.trainer.get_predictor(self._in_names, self._out_names, device=idx)
-        return lambda img: detect_one_image(img, graph_func)
-
-    def _before_train(self):
-        num_eval = cfg.TRAIN.NUM_EVALS
-        interval = max(self.trainer.max_epoch // (num_eval + 1), 1)
-        self.epochs_to_eval = set([interval * k for k in range(1, num_eval + 1)])
-        self.epochs_to_eval.add(self.trainer.max_epoch)
-        # for debug purpose
-        # self.epochs_to_eval.update([0, 1])
-        if len(self.epochs_to_eval) < 15:
-            logger.info("[EvalCallback] Will evaluate at epoch " + str(sorted(self.epochs_to_eval)))
-        else:
-            logger.info("[EvalCallback] Will evaluate every {} epochs".format(interval))
-
-    def _eval(self):
-        # with ThreadPoolExecutor(max_workers=self.num_predictor, thread_name_prefix='EvalWorker') as executor, \
-        # compatible with python 3.5
-        with ThreadPoolExecutor(max_workers=self.num_predictor) as executor, \
-                tqdm.tqdm(total=sum([df.size() for df in self.dataflows])) as pbar:
-            futures = []
-            for dataflow, pred in zip(self.dataflows, self.predictors):
-                futures.append(executor.submit(eval_output, dataflow, pred, pbar))
-            all_results = list(itertools.chain(*[fut.result() for fut in futures]))
-
-        output_file = os.path.join(
-            logger.get_logger_dir(), 'outputs{}.json'.format(self.global_step))
-        with open(output_file, 'w') as f:
-            json.dump(all_results, f)
-        # try:
-        #     scores = print_evaluation_scores(output_file)
-        #     for k, v in scores.items():
-        #         self.trainer.monitors.put_scalar(k, v)
-        # except Exception:
-        #     logger.exception("Exception in COCO evaluation.")
-
-    def _trigger_epoch(self):
-        if self.epoch_num in self.epochs_to_eval:
-            self._eval()
-
 
 def offline_evaluate(pred_func, output_file):
     df = get_eval_dataflow()
@@ -501,6 +480,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_predict', action='store_true')
     parser.add_argument('--config', nargs='+')
     parser.add_argument('--debug_mode', action='store_true')
+    parser.add_argument('--additional_monitoring', action='store_true')
 
     args = parser.parse_args()
     if args.config:
@@ -589,6 +569,7 @@ if __name__ == '__main__':
             EstimatedTimeLeft(median=True),
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
             GPUUtilizationTracker(),
+            # MergeAllSummaries(period=1, key='re_id_summaries_misc')
         ]
 
         if args.modeldir:
@@ -599,6 +580,9 @@ if __name__ == '__main__':
         if args.additional_monitoring:
             extra_callbacks = [MergeAllSummaries(period=1)]
             extra_monitors = [ScalarPrinter(enable_step=True, whitelist=['num_of_samples_used', 'loss'])]
+        else:
+            extra_callbacks = []
+            extra_monitors = []
 
         debug_mode = args.debug_mode
         if not debug_mode:
