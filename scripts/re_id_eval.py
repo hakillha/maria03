@@ -107,6 +107,7 @@ def classifier_eval(agrs):
     num_tp = 0
     num_gt = 0
     for result in classification_list:
+    # adding range when debugging
         """
             result[0]: fname
             result[1]: bb_list
@@ -126,6 +127,7 @@ def classifier_eval(agrs):
             continue
         det_gt_cls_array, pos_ind = bb_cls_matching(np.array(result[1]), gt_bb_array, gt_cls_array, iou_thresh=0.7)
         det_cls_array = np.argmax(np.array(result[2]), axis=1)
+        print(det_cls_array)
         # here we only consider the iou thresholded ones, this applies to gts as well
         num_tp += len(np.where(det_cls_array[pos_ind] == det_gt_cls_array[pos_ind]))
         num_gt += len(pos_ind)

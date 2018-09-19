@@ -443,7 +443,7 @@ class ResNetC4Model(DetectionModel):
                     # do we need to consider reuse here? 
                     # no cuz these are 2 different branches of the if control flow statement, 
                     # i.e. we are not trying to use the same var by repeatedly defining/annoucing them?
-                    mean_vectors = tf.get_variable('mean_vectors', (hidden.shape[-1], int(cfg.DATA.NUM_ID)),
+                    mean_vectors = tf.get_variable('mean_vectors', (fv.shape[-1], int(cfg.DATA.NUM_ID)),
                         initializer=tf.truncated_normal_initializer(stddev=1e-3), regularizer=None)
                     # log cos_scale
                     cos_scale = tf.get_variable('cos_scale', (), tf.float32,
@@ -451,10 +451,10 @@ class ResNetC4Model(DetectionModel):
                     cos_scale = tf.nn.softplus(cos_scale)
 
                     mean_vectors = tf.nn.l2_normalize(mean_vectors, axis=0)
-                    id_logits = cos_scale * tf.matmul(hidden, mean_vectors)
+                    id_logits = cos_scale * tf.matmul(fv, mean_vectors)
                 else:
                     id_logits = FullyConnected(
-                        'class', hidden, cfg.DATA.NUM_ID,
+                        'class', fv, cfg.DATA.NUM_ID,
                         kernel_initializer=tf.random_normal_initializer(stddev=0.01))
 
             scale = tf.sqrt(tf.cast(image_shape2d[0], tf.float32) / tf.cast(orig_shape[0], tf.float32) * 
