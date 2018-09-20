@@ -56,15 +56,23 @@ def viz_detection(args, fname, bb_list, cls_list=None, gt_cls_list=None):
     cv2.imwrite(os.path.join('output','test03',os.path.basename(input_file)), viz)
     # tpviz.interactive_imshow(viz)
 
+def pad_smaller_image(img):
+    out_img = np.zeros((1080, 1920, 3))
+    out_img[int((1080 - img.shape[0]) / 2):int((1080 - img.shape[0]) / 2 + img.shape[0]), 
+            int((1920 - img.shape[1]) / 2):int((1920 - img.shape[1]) / 2 + img.shape[1]), :] = img
+    return out_img
+
 def re_id_viz_detection(args, query_fname, gallery_fname, query_bb, top1_bb):
-    query_file = os.path.join(args.anno_dir, '..', 'frames', os.path.basename(query_fname).split('.')[0] + '.jpg')
-    gallery_file = os.path.join(args.anno_dir, '..', 'frames', os.path.basename(gallery_fname).split('.')[0] + '.jpg')
+    query_file = os.path.join(args.anno_dir, '..', 'frames', query_fname + '.jpg')
+    gallery_file = os.path.join(args.anno_dir, '..', 'frames', gallery_fname + '.jpg')
     query_image = cv2.imread(query_file, cv2.IMREAD_COLOR)
     gallery_img = cv2.imread(gallery_file, cv2.IMREAD_COLOR)
     query_image_with_bb = draw_final_outputs(query_image, query_bb, tags_on=False, bb_list_input=True)
     gallery_image_with_bb = draw_final_outputs(gallery_img, [top1_bb], tags_on=False, bb_list_input=True)
+    query_image_with_bb = pad_smaller_image(query_image_with_bb)
+    gallery_image_with_bb = pad_smaller_image(gallery_image_with_bb)
     viz = np.concatenate((query_image_with_bb, gallery_image_with_bb), axis=1)
-    cv2.imwrite(os.path.join('output','test04',os.path.basename(query_fname)), viz)
+    cv2.imwrite(os.path.join('output', 'test05', query_fname + '.jpg'), viz)
     # tpviz.interactive_imshow(viz)
 
 def re_id_eval(args):
@@ -92,60 +100,53 @@ def re_id_eval(args):
             for bb, fv, det_cls in zip(frame[1], frame[4], det_gt_cls_array):
                 gallery_bb.append(fv + bb + [det_cls])
                 # corresponding images
-                gallery_fname.append(frame[0])
+                gallery_fname.append(os.path.basename(frame[0]).split('.')[0])
     gallery_bb = np.array(gallery_bb)
+    gallery_fname = np.array(gallery_fname)
     # to see how many dets are generated
     print(gallery_bb.shape)
             
     with open(args.query_file, 'r') as query_file:
         query_list = json.load(query_file)
-        tp_top20 = 0.0
-        # with tqdm.tqdm(total=len(query_list), **get_tqdm_kwargs()) as tqdm_bar:
-        #     for query in query_list:
-        #         """
-        #             query[0]: query id list
-        #             query[1]: feature vector list
-        #         """
-        #         fv = np.array(query[1][0][0])
-        #         # print(fv.size)
-        #         distance = []
-        #         for gfv in gallery_bb:
-        #             distance.append(np.linalg.norm(fv - gfv[:args.fv_length])) # 256 - fv length
-        #         distance_array = np.array(distance)
-        #         index_sort = np.argsort(distance_array)
-        #         cls_top20 = gallery_bb[index_sort[:20], -1]
-        #         if query[0][0] in cls_top20.astype(int).tolist():
-        #             print(query[0][0], cls_top20.astype(int).tolist())
-        #             # print('yay')
-        #             tp_top20 += 1
-        #         tqdm_bar.update(1)
-        for query in query_list:
-            """
-                query[0]: query fname
-                query[1]: query id list
-                query[2]: feature vector list
-                query[3]: original box list
-            """
-            fv = np.array(query[2][0][0])
-            # print(fv.size)
-            distance = []
-            for gfv in gallery_bb:
-                distance.append(np.linalg.norm(fv - gfv[:args.fv_length])) # 256 - fv length
-            distance_array = np.array(distance)
-            index_sort = np.argsort(distance_array)
-            cls_top20 = gallery_bb[index_sort[:20], -1]
-            top = 1 # top2
-            top1_image = gallery_fname[index_sort[top]]
+        tp_top20 = 0
+        tp_top1 = 0
+        with tqdm.tqdm(total=len(query_list), **get_tqdm_kwargs()) as tqdm_bar:
+            for query in query_list:
+                """
+                    query[0]: query fname
+                    query[1]: query id list
+                    query[2]: feature vector list
+                    query[3]: original box list
+                """
+                fv = np.array(query[2][0][0])
+                # print(fv.size)
+                distance = []
 
-            if VISUALIZE_RE_ID:
-                re_id_viz_detection(args, query[0], top1_image, query[3][0], gallery_bb[index_sort[top], -5:-1])
+                query_base_name = os.path.basename(query[0]).split('.')[0]
+                gallery_minus_query_bb = gallery_bb[gallery_fname != query_base_name]
+                gallery_minus_query_fname = gallery_fname[gallery_fname != query_base_name]
 
-            if query[1][0] in cls_top20.astype(int).tolist():
-                print(query[1][0], cls_top20.astype(int).tolist())
-                # print('yay')
-                tp_top20 += 1
+                for gfv in gallery_minus_query_bb:
+                    distance.append(np.linalg.norm(fv - gfv[:args.fv_length])) # 256 - fv length
+                distance_array = np.array(distance)
+                index_sort = np.argsort(distance_array)
+                cls_top20 = gallery_minus_query_bb[index_sort[:20], -1]
+                top = 0 # top2
+                top1_image = gallery_minus_query_fname[index_sort[top]]
+
+                if VISUALIZE_RE_ID:
+                    re_id_viz_detection(args, query_base_name, top1_image, query[3][0], gallery_minus_query_bb[index_sort[top], -5:-1])
+
+                if query[1][0] in cls_top20.astype(int).tolist():
+                    # print(query[1][0], cls_top20.astype(int).tolist())
+                    # print('yay')
+                    tp_top20 += 1
+                if query[1][0] == gallery_minus_query_bb[index_sort[top], -1]:
+                    tp_top1 += 1
+                tqdm_bar.update(1)
     
-    print('Top 20 accuracy: ' + str(tp_top20/len(query_list)))
+    print('Top 1 accuracy: ' + str(float(tp_top1)/len(query_list)))
+    print('Top 20 accuracy: ' + str(float(tp_top20)/len(query_list)))
 
 def classifier_eval(agrs):
     with open(args.classification_file, 'r') as cls_file:
