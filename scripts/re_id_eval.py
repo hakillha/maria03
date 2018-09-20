@@ -13,7 +13,7 @@ from tensorpack.utils.utils import get_tqdm_kwargs
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 
 from utils.np_box_ops import iou
-from viz import draw_final_outputs
+from utils.viz import draw_final_outputs
 
 # VISUALIZE = True
 VISUALIZE = False
@@ -62,13 +62,13 @@ def pad_smaller_image(img):
             int((1920 - img.shape[1]) / 2):int((1920 - img.shape[1]) / 2 + img.shape[1]), :] = img
     return out_img
 
-def re_id_viz_detection(args, query_fname, gallery_fname, query_bb, top1_bb):
+def re_id_viz_detection(args, query_fname, gallery_fname, query_bb, top1_bb, query_id, pred_id):
     query_file = os.path.join(args.anno_dir, '..', 'frames', query_fname + '.jpg')
     gallery_file = os.path.join(args.anno_dir, '..', 'frames', gallery_fname + '.jpg')
     query_image = cv2.imread(query_file, cv2.IMREAD_COLOR)
     gallery_img = cv2.imread(gallery_file, cv2.IMREAD_COLOR)
-    query_image_with_bb = draw_final_outputs(query_image, query_bb, tags_on=False, bb_list_input=True)
-    gallery_image_with_bb = draw_final_outputs(gallery_img, [top1_bb], tags_on=False, bb_list_input=True)
+    query_image_with_bb = draw_final_outputs(query_image, query_bb, ids=[query_id], bb_list_input=True)
+    gallery_image_with_bb = draw_final_outputs(gallery_img, [top1_bb], ids=[pred_id], bb_list_input=True)
     query_image_with_bb = pad_smaller_image(query_image_with_bb)
     gallery_image_with_bb = pad_smaller_image(gallery_image_with_bb)
     viz = np.concatenate((query_image_with_bb, gallery_image_with_bb), axis=1)
@@ -135,7 +135,9 @@ def re_id_eval(args):
                 top1_image = gallery_minus_query_fname[index_sort[top]]
 
                 if VISUALIZE_RE_ID:
-                    re_id_viz_detection(args, query_base_name, top1_image, query[3][0], gallery_minus_query_bb[index_sort[top], -5:-1])
+                    re_id_viz_detection(args, query_base_name, top1_image, 
+                                        query[3][0], gallery_minus_query_bb[index_sort[top], -5:-1],
+                                        query[1][0], gallery_minus_query_bb[index_sort[top], -1])
 
                 if query[1][0] in cls_top20.astype(int).tolist():
                     # print(query[1][0], cls_top20.astype(int).tolist())

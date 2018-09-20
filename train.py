@@ -36,8 +36,8 @@ from model_frcnn import (sample_fast_rcnn_targets, fastrcnn_outputs,
 from model_id import query_eval
 from model_rpn import (rpn_head, generate_rpn_proposals,
                         rpn_losses,)
-from viz import draw_final_outputs
 from utils.box_ops import tf_clip_boxes, pairwise_iou
+from utils.viz import draw_final_outputs
 
 
 class DetectionModel(ModelDesc):
