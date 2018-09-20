@@ -409,7 +409,7 @@ def get_query_dataflow():
 
     def preprocess(img):
         fname, boxes, re_id_class = img['file_name'], img['boxes'], img['re_id_class']
-        boxes = np.copy(boxes)
+        orig_boxes = np.copy(boxes)
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
         assert im is not None, fname
         im = im.astype('float32')
@@ -423,7 +423,7 @@ def get_query_dataflow():
         boxes = point8_to_box(points)
         assert np.min(np_area(boxes)) > 0, "Some boxes have zero area!"
 
-        ret = [im, boxes, re_id_class]
+        ret = [fname, im, boxes, re_id_class, orig_boxes]
 
         return ret
 

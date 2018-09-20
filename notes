@@ -52,3 +52,9 @@ python train.py --config \
 DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ \
 BACKBONE.WEIGHTS=train_log/frcnn_prw_id_09_05_06_backup/model-420000 \
 --logdir=train_log/test04
+
+python train.py --modeldir=train_log/frcnn_prw_id_09_14_03/model-190000 --evaluate_classifier=train_log/frcnn_prw_id_09_14_03/classification_02.json --config DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ RE_ID.COSINE_SOFTMAX=True RE_ID.FC_LAYERS_ON=False
+
+python train.py --modeldir=train_log/frcnn_prw_id_09_14_03/model-190000 --query=train_log/frcnn_prw_id_09_14_03/query_re_id_fv_01.json --config DATA.BASEDIR=/scratch1/yingges/datasets/PRW-v16.04.20/ RE_ID.COSINE_SOFTMAX=True RE_ID.FC_LAYERS_ON=False
+
+python3 train.py --modeldir=ckpt/result01/model-190000 --query=ckpt/result01/query_re_id_fv_02.json --config DATA.BASEDIR=../PRW-v16.04.20/ RE_ID.COSINE_SOFTMAX=True RE_ID.FC_LAYERS_ON=False

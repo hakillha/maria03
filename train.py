@@ -431,6 +431,7 @@ class ResNetC4Model(DetectionModel):
                 roi_resized = roi_align(featuremap, preds_on_featuremap, 14)
                 feature_idhead = resnet_conv5(roi_resized, cfg.BACKBONE.RESNET_NUM_BLOCK[-1])    # nxcx7x7
                 feature_gap = GlobalAvgPooling('gap', feature_idhead, data_format='channels_first')
+                # print(feature_gap)
 
                 if cfg.RE_ID.FC_LAYERS_ON:
                     hidden = FullyConnected('fc6', feature_gap, 1024, activation=tf.nn.relu)

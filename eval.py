@@ -123,18 +123,22 @@ def query_eval_output(df, pred_func, tqdm_bar=None):
         if tqdm_bar is None:
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
-        for img, gt_boxes, gt_ids in df.get_data():
+        for fname, img, gt_boxes, gt_ids, orig_boxes in df.get_data():
             fvs = pred_func(img, gt_boxes)
             # print(fvs.shape)
 
             result_list = []
             fv_list = []
             id_list = []
+            orig_bb_list = []
             for fv, gt_id in zip(fvs, gt_ids):
-                fv_list.append(fv.tolist())
                 id_list.append(int(gt_id))
+                fv_list.append(fv.tolist())
+                orig_bb_list.append(orig_boxes.tolist())
+            result_list.append(fname)
             result_list.append(id_list)
             result_list.append(fv_list)
+            result_list.append(orig_bb_list)
                 
             all_results.append(result_list)
             tqdm_bar.update(1)
