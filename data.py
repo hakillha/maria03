@@ -82,6 +82,11 @@ class PRWDataset(object):
                     img['boxes'] = np.asarray(img['boxes'], dtype='float32')
                     img['class'] = np.ones(len(gt_bb_array))
                     img['re_id_class'] = np.asarray(gt_bb_array[:, 0], dtype='int32')
+                    # 
+                    if len(np.where(img['re_id_class'] == 932)[0]):
+                        print('Last ID shifted.')
+                    img['re_id_class'][img['re_id_class'] == 932] = 479
+
 
                     img['is_crowd'] = np.zeros(len(img['re_id_class']), dtype='int8')
 

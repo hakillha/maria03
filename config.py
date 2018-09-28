@@ -141,11 +141,11 @@ _C.FRCNN.FG_RATIO = 0.25  # fg ratio in a ROI batch
 # re-id branch
 # _C.DATA.NUM_ID = 934
 # unlabeled pedes shouldn't be counted
-_C.DATA.NUM_ID = 933
+_C.DATA.NUM_ID = 483
 _C.DATA.INCLUDE_ALL = True
 
 _C.RE_ID.IOU_THRESH = 0.7
-_C.RE_ID.NMS = True
+_C.RE_ID.NMS = False
 _C.RE_ID.QUERY_EVAL = False
 # _C.RE_ID.LOSS_NORMALIZATION = 1.0
 _C.RE_ID.LOSS_NORMALIZATION = 4.5
@@ -154,9 +154,9 @@ _C.RE_ID.LOSS_NORMALIZATION = 4.5
 # _C.RE_ID.STABLE_LOSS = 1e-3
 # _C.RE_ID.STABLE_LOSS = 10.0
 _C.RE_ID.STABLE_LOSS = 0.1
-_C.RE_ID.FC_LAYERS_ON = True
-_C.RE_ID.COSINE_SOFTMAX = False
-_C.RE_ID.LSRO = False
+_C.RE_ID.FC_LAYERS_ON = False
+_C.RE_ID.COSINE_SOFTMAX = True
+_C.RE_ID.LSRO = True
 
 # re-id eval
 _C.RE_ID.USE_DPM = False
