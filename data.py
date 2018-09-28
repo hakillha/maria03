@@ -382,7 +382,7 @@ def get_eval_dataflow(shard=0, num_shards=1):
 
     # no filter for training
     # test if it can repeat keys
-    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], ['file_name', 'file_name'])
+    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], ['file_name', 'file_name', 're_id_class'])
 
     def f(fname):
         im = cv2.imread(fname, cv2.IMREAD_COLOR)

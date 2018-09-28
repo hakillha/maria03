@@ -73,12 +73,14 @@ def eval_output(df, detect_func, tqdm_bar=None):
     """
     df.reset_state()
     all_results = []
+    jsonable = False
+
     # tqdm is not quite thread-safe: https://github.com/tqdm/tqdm/issues/323
     with ExitStack() as stack:
         if tqdm_bar is None:
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
-        for img, img_fname in df.get_data():
+        for img, img_fname, gt_ids in df.get_data():
             results = detect_func(img)
 
             result_list = []
@@ -98,8 +100,13 @@ def eval_output(df, detect_func, tqdm_bar=None):
             result_list.append(label_list)
             result_list.append(score_list)
             result_list.append(fv_list)
+            if cfg.RE_ID.USE_DPM:
+                result_list.append(gt_ids)
                 
             # dump a dummy json here to check for validity
+            if not jsonable:
+                jsonable = jsonable_test(result_list)
+
             all_results.append(result_list)
             tqdm_bar.update(1)
     return all_results

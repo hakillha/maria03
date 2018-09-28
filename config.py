@@ -158,6 +158,9 @@ _C.RE_ID.FC_LAYERS_ON = True
 _C.RE_ID.COSINE_SOFTMAX = False
 _C.RE_ID.LSRO = False
 
+# re-id eval
+_C.RE_ID.USE_DPM = False
+
 # testing -----------------------
 _C.TEST.FRCNN_NMS_THRESH = 0.5
 

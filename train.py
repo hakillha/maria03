@@ -417,7 +417,7 @@ class ResNetC4Model(DetectionModel):
             add_moving_summary(total_cost, wd_cost)
             return total_cost
         else:
-            if cfg.RE_ID.QUERY_EVAL:
+            if cfg.RE_ID.QUERY_EVAL or cfg.RE_ID.USE_DPM:
                 # resize the gt_boxes in dataflow
                 final_boxes = gt_boxes
             else:
