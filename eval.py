@@ -34,7 +34,7 @@ def jsonable_test(data, fname='dummy.json'):
 
     return True
 
-def detect_one_image(img, model_func):
+def detect_one_image(img, model_func, gt_boxes=None):
     """
     Run detection on one image, using the TF callable.
     This function should handle the preprocessing internally.
@@ -52,7 +52,10 @@ def detect_one_image(img, model_func):
     resizer = CustomResize(cfg.PREPROC.SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)
     resized_img = resizer.augment(img)
     scale = np.sqrt(resized_img.shape[0] * 1.0 / img.shape[0] * resized_img.shape[1] / img.shape[1])
-    boxes, probs, labels, fv = model_func(resized_img)
+    if cfg.RE_ID.USE_DPM:
+        return model_func(resized_img, gt_boxes)
+    else:
+        boxes, probs, labels, fv = model_func(resized_img)
     boxes = boxes / scale
     # boxes are already clipped inside the graph, but after the floating point scaling, this may not be true any more.
     boxes = clip_boxes(boxes, orig_shape)
@@ -80,28 +83,37 @@ def eval_output(df, detect_func, tqdm_bar=None):
         if tqdm_bar is None:
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
-        for img, img_fname, gt_ids in df.get_data():
-            results = detect_func(img)
-
+        for img, img_fname, boxes in df.get_data():
             result_list = []
             result_list.append(img_fname)
 
-            bb_list = []
-            label_list = []
-            score_list = []
-            fv_list = []
-            for r in results:
-                box = r.box
-                bb_list.append(list(map(lambda x: round(float(x), 2), box)))
-                label_list.append(int(r.class_id))
-                score_list.append(round(float(r.score), 3))
-                fv_list.append(r.fv.tolist())
-            result_list.append(bb_list)
-            result_list.append(label_list)
-            result_list.append(score_list)
-            result_list.append(fv_list)
             if cfg.RE_ID.USE_DPM:
-                result_list.append(gt_ids)
+                fvs = detect_func(img, boxes)
+                
+                bb_list = []
+                fv_list = []
+                for fv, box in fvs, boxes:
+                    bb_list.append(list(map(lambda x: round(float(x), 2), box)))
+                    fv_list.append(fv.tolist())
+                result_list.append(bb_list)
+                result_list.append(fv_list)
+            else:
+                results = detect_func(img)
+
+                bb_list = []
+                label_list = []
+                score_list = []
+                fv_list = []
+                for r in results:
+                    box = r.box
+                    bb_list.append(list(map(lambda x: round(float(x), 2), box)))
+                    label_list.append(int(r.class_id))
+                    score_list.append(round(float(r.score), 3))
+                    fv_list.append(r.fv.tolist())
+                result_list.append(bb_list)
+                result_list.append(label_list)
+                result_list.append(score_list)
+                result_list.append(fv_list)
                 
             # dump a dummy json here to check for validity
             if not jsonable:

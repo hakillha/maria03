@@ -164,6 +164,16 @@ class DetectionModel(ModelDesc):
         out = ['final_boxes', 'final_probs', 'final_labels', 'feature_vector']
         return ['image'], out
 
+    def get_inference_tensor_names_using_dpm(self):
+        """
+        Returns two lists of tensor names to be used to create an inference callable.
+
+        Returns:
+            [str]: input names
+            [str]: output names
+        """
+        return ['image', 'gt_boxes'], ['feature_vector']
+
     def get_query_inference_tensor_names(self):
         """
         Returns two lists of tensor names to be used to create an inference callable.
@@ -525,11 +535,16 @@ if __name__ == '__main__':
         if args.predict:
             cfg.TEST.RESULT_SCORE_THRESH = cfg.TEST.RESULT_SCORE_THRESH_VIS
 
+        if cfg.RE_ID.USE_DPM:
+            handles = MODEL.get_inference_tensor_names_using_dpm()
+        else:
+            handles = MODEL.get_inference_tensor_names()
         pred = OfflinePredictor(PredictConfig(
                 model=MODEL,
                 session_init=get_model_loader(args.modeldir),
-                input_names=MODEL.get_inference_tensor_names()[0],
-                output_names=MODEL.get_inference_tensor_names()[1]))
+                input_names=handles[0],
+                output_names=handles[1]))
+
         if args.evaluate:
             assert args.evaluate.endswith('.json'), args.evaluate
             offline_evaluate(pred, args.evaluate)

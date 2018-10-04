@@ -131,6 +131,37 @@ class PRWDataset(object):
             
         return imgs
 
+    def load_dpm(self):
+        frame_list = scipy.io.loadmat(pjoin(self._basedir, 'frame_test.mat'))['img_index_test']
+        dpm_det_list = scipy.io.loadmat(pjoin(self._basedir, 'dpm_test.mat'))['dpm_test']
+        imgs = []
+
+        # each iteration only reads one file so it's faster
+        for idx, (frame, frame_det_list) in enumerate(zip(frame_list, dpm_det_list)):
+            img = {}
+
+            self._use_absolute_file_name(img, frame[0][0])
+
+            if frame[0][0][1] == '6':
+                img['height'] = 576
+                img['width'] = 720
+            else:
+                img['height'] = 1080
+                img['width'] = 1920
+
+            img['boxes'] = []
+            for bb in frame_det_list:
+                box = FloatBox(bb[1], bb[2], bb[3], bb[4])
+                assert bb[3] > bb[1]
+                assert bb[4] > bb[2]
+                box.clip_by_shape([img['height'], img['width']])
+                img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
+            img['boxes'] = np.asarray(img['boxes'], dtype='float32')
+
+            imgs.append(img)
+
+        return imgs
+
     def _use_absolute_file_name(self, img, file_name):
         """
         Change relative filename to abosolute file name.
@@ -380,14 +411,15 @@ def get_eval_dataflow(shard=0, num_shards=1):
         shard, num_shards: to get subset of evaluation data
     """
     prw = PRWDataset(cfg.DATA.BASEDIR)
-    imgs = prw.load('test')
+    if cfg.RE_ID.USE_DPM:
+        imgs = prw.load_dpm()
+    else:
+        imgs = prw.load('test')
     num_imgs = len(imgs)
-    img_per_shard = num_imgs // num_shards
-    img_range = (shard * img_per_shard, (shard + 1) * img_per_shard if shard + 1 < num_shards else num_imgs)
 
     # no filter for training
     # test if it can repeat keys
-    ds = DataFromListOfDict(imgs[img_range[0]: img_range[1]], ['file_name', 'file_name', 're_id_class'])
+    ds = DataFromListOfDict(imgs, ['file_name', 'file_name', 'boxes'])
 
     def f(fname):
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
