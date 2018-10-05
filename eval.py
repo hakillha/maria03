@@ -83,22 +83,23 @@ def eval_output(df, detect_func, tqdm_bar=None):
         if tqdm_bar is None:
             tqdm_bar = stack.enter_context(
                 tqdm.tqdm(total=df.size(), **get_tqdm_kwargs()))
+        # if not using dpm dets the boxes would actually be file names
         for img, img_fname, boxes in df.get_data():
             result_list = []
             result_list.append(img_fname)
 
             if cfg.RE_ID.USE_DPM:
-                fvs = detect_func(img, boxes)
+                fvs = detect_func(img, boxes)[0]
                 
                 bb_list = []
                 fv_list = []
-                for fv, box in fvs, boxes:
+                for fv, box in zip(fvs, boxes):
                     bb_list.append(list(map(lambda x: round(float(x), 2), box)))
                     fv_list.append(fv.tolist())
                 result_list.append(bb_list)
                 result_list.append(fv_list)
             else:
-                results = detect_func(img)
+                results = detect_func(img, None)
 
                 bb_list = []
                 label_list = []

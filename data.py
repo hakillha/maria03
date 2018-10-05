@@ -150,15 +150,19 @@ class PRWDataset(object):
                 img['width'] = 1920
 
             img['boxes'] = []
-            for bb in frame_det_list:
-                box = FloatBox(bb[1], bb[2], bb[3], bb[4])
-                assert bb[3] > bb[1]
-                assert bb[4] > bb[2]
+            for bb in frame_det_list[0]:
+                box = FloatBox(bb[0], bb[1], bb[2], bb[3])
+                if bb[2] < bb[0] or bb[3] < bb[1]:
+                    print('Invalid detection results found!')
+                    continue
+                # assert bb[2] > bb[0], bb
+                # assert bb[3] > bb[1], bb
                 box.clip_by_shape([img['height'], img['width']])
                 img['boxes'].append([box.x1, box.y1, box.x2, box.y2])
             img['boxes'] = np.asarray(img['boxes'], dtype='float32')
 
             imgs.append(img)
+
 
         return imgs
 
@@ -413,14 +417,15 @@ def get_eval_dataflow(shard=0, num_shards=1):
     prw = PRWDataset(cfg.DATA.BASEDIR)
     if cfg.RE_ID.USE_DPM:
         imgs = prw.load_dpm()
+        ds = DataFromListOfDict(imgs, ['file_name', 'file_name', 'boxes'])
     else:
         imgs = prw.load('test')
+        ds = DataFromListOfDict(imgs, ['file_name', 'file_name', 'file_name'])
     num_imgs = len(imgs)
 
     # no filter for training
     # test if it can repeat keys
-    ds = DataFromListOfDict(imgs, ['file_name', 'file_name', 'boxes'])
-
+    
     def f(fname):
         im = cv2.imread(fname, cv2.IMREAD_COLOR)
         assert im is not None, fname

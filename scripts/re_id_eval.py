@@ -72,12 +72,14 @@ def re_id_viz_detection(args, query_fname, gallery_fname, query_bb, top1_bb, que
     query_image_with_bb = pad_smaller_image(query_image_with_bb)
     gallery_image_with_bb = pad_smaller_image(gallery_image_with_bb)
     viz = np.concatenate((query_image_with_bb, gallery_image_with_bb), axis=1)
-    cv2.imwrite(os.path.join('output', 'test05', query_fname + '.jpg'), viz)
+    cv2.imwrite(os.path.join('output', 'test07', query_fname + '_' + str(query_id) + '.jpg'), viz)
     # tpviz.interactive_imshow(viz)
 
 def re_id_eval(args):
     with open(args.gallery_file, 'r') as gallery_file:
+        print('Reading json file...')
         gallery_list = json.load(gallery_file)
+        print('Done!')
         gallery_bb = []
         gallery_fname = []
         for frame in gallery_list:
@@ -97,7 +99,8 @@ def re_id_eval(args):
                 # print('No detection')
                 continue
             det_gt_cls_array, pos_ind = bb_cls_matching(np.array(frame[1]), gt_bb_array, gt_cls_array)
-            for bb, fv, det_cls in zip(frame[1], frame[4], det_gt_cls_array):
+            for bb, fv, det_cls in zip(frame[1], frame[-1], det_gt_cls_array):
+                print(len(fv))
                 gallery_bb.append(fv + bb + [det_cls])
                 # corresponding images
                 gallery_fname.append(os.path.basename(frame[0]).split('.')[0])
@@ -127,6 +130,7 @@ def re_id_eval(args):
                 gallery_minus_query_fname = gallery_fname[gallery_fname != query_base_name]
 
                 for gfv in gallery_minus_query_bb:
+                    print(len(gfv))
                     distance.append(np.linalg.norm(fv - gfv[:args.fv_length])) # 256 - fv length
                 distance_array = np.array(distance)
                 index_sort = np.argsort(distance_array)
@@ -141,7 +145,7 @@ def re_id_eval(args):
 
                 if query[1][0] in cls_top20.astype(int).tolist():
                     # print(query[1][0], cls_top20.astype(int).tolist())
-                    # print('yay')
+                    print('yay')
                     tp_top20 += 1
                 if query[1][0] == gallery_minus_query_bb[index_sort[top], -1]:
                     tp_top1 += 1
@@ -210,7 +214,7 @@ if __name__ == '__main__':
     parser.add_argument('--gallery_file')
     parser.add_argument('--classification_file')
     parser.add_argument('--fv_length', default=2048)
-    parser.add_argument('--anno_dir', default='/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/converted_annotations02')
+    parser.add_argument('--anno_dir', default='/media/yingges/TOSHIBA EXT/datasets/re-ID/PRW-v16.04.20/test_converted_annotations')
     args = parser.parse_args()
 
     if args.query_file and args.gallery_file:

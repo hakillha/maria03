@@ -482,7 +482,7 @@ class ResNetC4Model(DetectionModel):
 def offline_evaluate(pred_func, output_file):
     df = get_eval_dataflow()
     all_results = eval_output(
-        df, lambda img: detect_one_image(img, pred_func))
+        df, lambda img, gt_boxes: detect_one_image(img, pred_func, gt_boxes))
     with open(output_file, 'w') as f:
         json.dump(all_results, f)
     # print_evaluation_scores(output_file)
