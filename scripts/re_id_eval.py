@@ -100,7 +100,6 @@ def re_id_eval(args):
                 continue
             det_gt_cls_array, pos_ind = bb_cls_matching(np.array(frame[1]), gt_bb_array, gt_cls_array)
             for bb, fv, det_cls in zip(frame[1], frame[-1], det_gt_cls_array):
-                print(len(fv))
                 gallery_bb.append(fv + bb + [det_cls])
                 # corresponding images
                 gallery_fname.append(os.path.basename(frame[0]).split('.')[0])
@@ -130,7 +129,6 @@ def re_id_eval(args):
                 gallery_minus_query_fname = gallery_fname[gallery_fname != query_base_name]
 
                 for gfv in gallery_minus_query_bb:
-                    print(len(gfv))
                     distance.append(np.linalg.norm(fv - gfv[:args.fv_length])) # 256 - fv length
                 distance_array = np.array(distance)
                 index_sort = np.argsort(distance_array)
