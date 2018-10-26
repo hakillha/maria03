@@ -66,6 +66,7 @@ class PRWDataset(object):
                         img['width'] = 1920
 
                     anno_data = scipy.io.loadmat(pjoin(self._annodir, frame[0][0] + '.jpg.mat'))
+
                     if 'box_new' in anno_data:
                         gt_bb_array = anno_data['box_new']
                     elif 'anno_file' in anno_data:
@@ -74,6 +75,7 @@ class PRWDataset(object):
                         gt_bb_array = anno_data['anno_previous']
                     else:
                         raise Exception(frame[0][0] + ' bounding boxes info missing!')
+                    
                     img['boxes'] = []
                     for bb in gt_bb_array:
                         box = FloatBox(bb[1], bb[2], bb[1] + bb[3], bb[2] + bb[4])
